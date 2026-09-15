@@ -1,0 +1,1880 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Roszada</title>
+<meta name="description" content="Roszada — codzienna łamigłówka logiczna.">
+<meta name="color-scheme" content="only light">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="supported-color-schemes" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FFFFFF;
+  --surface:#F4F5F7;
+  --sunk:#ECEEF1;
+  --line:#E2E5EA;
+  --ink:#14171C;
+  --soft:#6C7480;
+  --accent:#2B4C9B;
+  --accent-soft:#EDF1FA;
+  --ok:#2F7D53;
+  --warn:#B4352E;
+
+  --tile-r:#C94A44;
+  --tile-b:#3A6FB0;
+  --tile-a:#D28A2E;
+  --tile-g:#3F8F66;
+
+  --tile-w:40px;
+  --tile-h:52px;
+  --tile-f:19px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+/*
+ * LOCKED TO LIGHT, DELIBERATELY. The board is a pale table with a dark rack under it; inverted
+ * automatically it becomes a dark table with a darker rack and the tiles stop separating. A real
+ * dark theme is a redesign, not a filter, so the page opts out at every level it can:
+ * the meta above, the property here, and a re-assertion under prefers-color-scheme: dark.
+ */
+html{background:#FFFFFF!important}
+html,:root{color-scheme:only light}
+body{background:#FFFFFF!important}
+
+/* The backdrop is an ELEMENT, not a property, because a property is overridable and an
+   element is not. Sits behind everything at z-index:-1 and paints the whole viewport. */
+#bg{
+  position:fixed;inset:0;background:#FFFFFF!important;
+  z-index:-1;pointer-events:none;
+}
+@media (prefers-color-scheme:dark){
+  html,body{background:#FFFFFF;color:#14171C}
+  :root{
+    --paper:#FFFFFF;--surface:#F4F5F7;--sunk:#ECEEF1;--line:#E2E5EA;
+    --ink:#14171C;--soft:#6C7480;
+  }
+}
+body{
+  background:var(--paper);color:var(--ink);
+  font-family:'Inter',system-ui,-apple-system,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  -webkit-user-select:none;user-select:none;
+  min-height:100dvh;
+}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+.screen[hidden]{display:none}
+.serif{font-family:'Source Serif 4',Georgia,serif}
+
+/* ── top bar ──────────────────────────────────────────────────────────────── */
+.bar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 14px 12px;border-bottom:1px solid var(--line);
+  position:sticky;top:0;background:var(--paper);z-index:20;
+}
+.bar h1{
+  font-family:'Source Serif 4',Georgia,serif;
+  font-size:19px;font-weight:600;letter-spacing:-.01em;
+}
+/* the wordmark is a button: tapping the name goes home, as it does everywhere else */
+.lockup{
+  display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:9px;
+}
+.lockup:active{background:var(--surface)}
+.lockup span{
+  font-family:'Source Serif 4',Georgia,serif;
+  font-size:19px;font-weight:600;letter-spacing:-.015em;
+}
+.icon{
+  width:34px;height:34px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;color:var(--soft);
+}
+.icon:active{background:var(--surface)}
+
+/* ── difficulty band ──────────────────────────────────────────────────────── */
+.band{
+  padding:13px 16px 14px;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.band .who{display:flex;flex-direction:column;gap:3px;min-width:0}
+.band .nm{font-family:'Source Serif 4',Georgia,serif;font-size:20px;font-weight:600;line-height:1}
+.stars{font-size:13px;color:var(--accent);letter-spacing:2px;line-height:1}
+.stars span{color:#C9CDD4}
+
+/* DIFFICULTY IS SHOWN AS TILES, never as stars -- stars are the score, and one symbol
+   cannot mean two things. One green tile, two amber, three red. */
+.diff{display:flex;gap:3px;align-items:center}
+.diff i{width:11px;height:14px;border-radius:3px;display:block}
+.diff[data-d="1"] i{background:var(--tile-g)}
+.diff[data-d="2"] i{background:var(--tile-a)}
+.diff[data-d="3"] i{background:var(--tile-r)}
+.difflbl{font-size:11.5px;color:var(--soft);margin-left:5px}
+.band .rt{text-align:right;flex:0 0 auto}
+.count{font-size:12px;color:var(--soft);font-variant-numeric:tabular-nums}
+.freeing{font-size:12px;color:var(--soft);margin-top:3px;max-width:150px;line-height:1.3}
+
+/* ── board ────────────────────────────────────────────────────────────────── */
+main{padding:14px 12px 0}
+.cap{
+  font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--soft);margin:0 2px 7px;font-weight:600;
+}
+#table{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;min-height:60px}
+.set{
+  display:flex;align-items:center;
+  background:var(--surface);border:1px solid var(--line);border-radius:12px;
+  padding:5px;gap:0;flex-wrap:wrap;
+}
+.set.bad{border-color:var(--warn);background:#FCF2F1}
+#newset{
+  margin-top:8px;border:1px dashed var(--line);border-radius:12px;
+  min-height:46px;display:flex;align-items:center;justify-content:center;
+  color:var(--soft);font-size:12.5px;transition:.16s;
+}
+body.holding #newset{border-color:var(--accent);color:var(--accent);background:#F5F8FD}
+#hand{
+  display:flex;align-items:center;flex-wrap:wrap;gap:0;
+  background:var(--sunk);border-radius:12px;padding:6px;min-height:64px;margin-top:6px;
+}
+
+/* THE DESTINATION BAR: always in the layout, only ever LIT. An element appearing would reflow the
+   board, and a board that shifts under a decision is its own bug. */
+.drop{
+  flex:0 0 auto;width:5px;align-self:stretch;min-height:var(--tile-h);
+  border-radius:4px;background:transparent;transition:background .14s;margin:0 1px;
+}
+body.holding .drop{background:#CBD5E6}
+body.holding .drop:active{background:var(--accent)}
+
+/* the insertion gap: a real element with animated width, so it pushes its neighbours */
+.gap{flex:0 0 auto;width:0;transition:width .14s}
+.gap.open{width:var(--tile-w)}
+
+/* ── tiles ────────────────────────────────────────────────────────────────── */
+.tile{
+  position:relative;flex:0 0 auto;
+  width:var(--tile-w);height:var(--tile-h);margin:2px;
+  display:inline-flex;align-items:center;justify-content:center;
+  transition:transform .14s cubic-bezier(.2,.9,.3,1.2);
+  touch-action:none;
+}
+.tile__aura{position:absolute;inset:-5px;border-radius:14px;pointer-events:none}
+.tile__face{
+  position:absolute;inset:0;border-radius:10px;overflow:hidden;
+  background:var(--tile-colour);
+  box-shadow:0 1px 0 rgba(0,0,0,.16) inset,0 2px 4px rgba(20,23,28,.14);
+}
+.tile__glyph{
+  position:absolute;inset:0;display:grid;place-items:center;
+  color:rgba(255,255,255,.24);
+}
+.tile__glyph svg{
+  width:calc(var(--tile-w) * .86);height:calc(var(--tile-w) * .86);
+  fill:currentColor;display:block;
+}
+.tile__num{
+  position:relative;z-index:1;
+  font-size:var(--tile-f);font-weight:700;color:#fff;
+  font-variant-numeric:tabular-nums;letter-spacing:-.02em;
+  text-shadow:0 1px 2px rgba(0,0,0,.18);
+}
+.tile__num.wide{font-size:calc(var(--tile-f) - 3px)}
+
+/* HELD AND HINTED ARE DIFFERENT CHANNELS, not two intensities of one. */
+.tile.held{transform:translateY(-7px)}
+.tile.held .tile__face{box-shadow:0 0 0 2px #fff inset,0 0 0 3px var(--accent),0 6px 14px rgba(20,23,28,.26)}
+.tile.hint .tile__aura{
+  border:2px solid var(--accent);
+  box-shadow:0 0 0 3px rgba(43,76,155,.18);
+  animation:pulse 1.3s ease-in-out infinite;
+}
+.rack .tile.hint .tile__aura,
+#ghost .tile.hint .tile__aura{
+  border-color:#FFD34E;
+  box-shadow:0 0 12px 2px rgba(255,211,78,.45);
+}
+@keyframes pulse{0%,100%{opacity:.25}50%{opacity:1}}
+
+#ghost{position:fixed;left:0;top:0;z-index:99;pointer-events:none;display:flex;gap:3px;opacity:.94}
+.tile.ghosted{opacity:.3}
+#ghost .tile{transform:scale(1.08) rotate(-3deg);opacity:.95}
+
+/* ── bottom ───────────────────────────────────────────────────────────────── */
+.rack{
+  position:sticky;bottom:0;margin-top:14px;
+  background:#1E2534;border-radius:18px 18px 0 0;
+  padding:12px 12px calc(12px + env(safe-area-inset-bottom));
+  box-shadow:0 -8px 24px rgba(20,23,28,.14);
+}
+.rack .cap{color:#8D96A8;margin:2px 4px 8px}
+.rack #hand{background:rgba(255,255,255,.07);margin-top:0}
+.rack .btn{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.16);color:#EDF0F5}
+.rack .btn:disabled{opacity:.3}
+.rack .acts{padding:0;margin-top:10px}
+body.holding .rack .drop{background:rgba(255,255,255,.28)}
+body.holding .rack .drop:active{background:#fff}
+
+.status{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:11px 5px 2px;gap:10px;
+}
+.status .metrics{color:#8D96A8}
+.status .metrics b{color:#fff}
+.status .clock{color:#8D96A8}
+.scorestars{font-size:14px;letter-spacing:2px;color:#F0B429;line-height:1}
+.scorestars span{color:#414A5C}
+.heart{background:#6E7B94}
+.hearts.low .heart:not(.gone){background:#E2726A}
+.heart.gone{background:#333C4D}
+.hearts{display:flex;gap:4px;align-items:center}
+.heart{width:9px;height:9px;border-radius:50%;background:var(--accent);display:block}
+.heart.gone{background:#D6DAE0}
+.hearts.low .heart:not(.gone){background:var(--warn)}
+.metrics{font-size:13px;color:var(--soft);font-variant-numeric:tabular-nums}
+.metrics b{color:var(--ink);font-weight:600}
+.clock{font-size:13px;color:var(--soft);font-variant-numeric:tabular-nums}
+
+.acts{display:flex;gap:8px;padding:0 12px calc(18px + env(safe-area-inset-bottom))}
+.btn{
+  flex:1;padding:13px 6px;border-radius:11px;
+  border:1px solid var(--line);background:var(--paper);
+  font-size:13px;font-weight:600;
+}
+.btn:disabled{opacity:.35}
+.btn.go{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+
+/* ── logo ─────────────────────────────────────────────────────────────────── */
+.logo{display:block}
+.logo .lift{transform-origin:60px 34px;animation:liftTile 4.2s ease-in-out infinite}
+@keyframes liftTile{
+  0%,58%,100%{transform:translate(0,0) rotate(0deg)}
+  22%,42%{transform:translate(0,-13px) rotate(7deg)}
+}
+
+/* ── home ─────────────────────────────────────────────────────────────────── */
+.home{min-height:100dvh;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:34px 24px;text-align:center}
+.home .mark{margin-bottom:20px}
+.home h1{font-family:'Source Serif 4',Georgia,serif;font-size:42px;font-weight:600;
+  letter-spacing:-.03em;line-height:1}
+.home .tag{color:var(--soft);font-size:15px;line-height:1.5;margin-top:11px;max-width:290px}
+.home .menu{display:flex;flex-direction:column;gap:9px;width:100%;max-width:290px;margin-top:32px}
+.home .menu .btn{padding:15px}
+.credit{margin-top:auto;padding-top:30px;font-size:11.5px;color:#9AA1AC;line-height:1.6;max-width:300px}
+
+/* ── the animated demonstration ───────────────────────────────────────────── */
+.demo{position:relative;height:152px;margin:12px auto 2px;max-width:252px}
+.demo .tile{position:absolute;--tile-w:26px;--tile-h:34px;--tile-f:13px;margin:0;
+  animation-duration:7.5s;animation-iteration-count:infinite;
+  animation-timing-function:cubic-bezier(.45,0,.2,1)}
+.demo .cap2{position:absolute;left:0;right:0;bottom:0;font-size:11.5px;color:var(--soft);text-align:center}
+@keyframes slideL{0%,20%{transform:translateX(0)}34%,88%{transform:translateX(-12px)}100%{transform:translateX(0)}}
+@keyframes slideR{0%,20%{transform:translateX(0)}34%,88%{transform:translateX(12px)}100%{transform:translateX(0)}}
+@keyframes pullOut{
+  0%,18%{transform:translate(0,0)}
+  30%{transform:translate(0,-18px)}
+  46%,88%{transform:translate(0,64px)}
+  100%{transform:translate(0,0)}
+}
+@keyframes joinL{0%,44%{transform:translate(0,0)}58%,88%{transform:translate(58px,0)}100%{transform:translate(0,0)}}
+@keyframes joinR{0%,44%{transform:translate(0,0)}58%,88%{transform:translate(87px,0)}100%{transform:translate(0,0)}}
+
+/* ── list ─────────────────────────────────────────────────────────────────── */
+.intro{padding:20px 18px 6px}
+.intro h2{font-family:'Source Serif 4',Georgia,serif;font-size:27px;font-weight:600;letter-spacing:-.02em;line-height:1.15}
+.intro p{color:var(--soft);font-size:14.5px;line-height:1.5;margin-top:9px}
+.listGrid{display:flex;flex-direction:column;gap:9px;padding:16px 14px 30px}
+.lvcard{
+  display:grid;grid-template-columns:34px 1fr auto;gap:3px 12px;align-items:center;
+  border:1px solid var(--line);border-radius:13px;padding:13px 14px;text-align:left;background:var(--paper);
+}
+.lvcard[data-done]{border-color:var(--ok);background:#F4FAF6}
+.lvnum{
+  grid-row:1/3;font-family:'Source Serif 4',Georgia,serif;font-size:21px;
+  color:var(--soft);text-align:center;
+}
+.lvname{font-size:15.5px;font-weight:600}
+.lvres{grid-column:2;font-size:12.5px;color:var(--soft);font-variant-numeric:tabular-nums;
+  display:flex;align-items:center;gap:8px}
+.lvres .diff i{width:9px;height:12px}
+.lvstars{font-size:13px;color:#E0A81F;letter-spacing:2px;grid-row:1/3}
+.lvstars span{color:#D6DAE0}
+
+/* ── rules + end ──────────────────────────────────────────────────────────── */
+.sheet{padding:20px 18px 34px;max-width:520px;margin:0 auto}
+.sheet h2{font-family:'Source Serif 4',Georgia,serif;font-size:24px;font-weight:600;margin-bottom:5px}
+.sheet .lead{color:var(--soft);font-size:14.5px;line-height:1.5;margin-bottom:20px}
+.rule{margin-bottom:19px}
+.rule h3{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-bottom:7px}
+.rule p{color:var(--soft);font-size:14px;line-height:1.5;margin-top:7px}
+.mini{display:flex;gap:3px}
+.mini .tile{margin:0 1px}
+
+.end{
+  min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:28px 22px;text-align:center;
+}
+.endStars{font-size:30px;color:#E0A81F;letter-spacing:5px;margin-bottom:12px}
+.endStars span{color:#D6DAE0}
+.end h2{font-family:'Source Serif 4',Georgia,serif;font-size:31px;font-weight:600;letter-spacing:-.02em}
+.endLine{font-size:15px;color:var(--soft);margin-top:11px;font-variant-numeric:tabular-nums}
+.endLine b{color:var(--ink);font-weight:600}
+.endNote{font-size:14px;color:var(--soft);margin-top:7px;line-height:1.45;max-width:270px}
+.end .acts{width:100%;max-width:330px;margin-top:26px;padding:0;flex-wrap:wrap}
+#end[data-kind=lose] .endStars{color:#D6DAE0}
+#end[data-kind=lose] h2{color:var(--warn)}
+
+.solrow{display:flex;flex-wrap:wrap;margin-bottom:8px;background:var(--surface);
+  border:1px solid var(--line);border-radius:12px;padding:5px;width:fit-content}
+
+</style>
+</head>
+<body data-screen="list">
+<div id="bg" aria-hidden="true"></div>
+
+
+<!-- ═══ HOME ═══ -->
+<section class="screen" id="home" hidden>
+  <div class="home">
+    <div class="mark"><svg class="logo" width="124" height="66" viewBox="0 0 124 66" fill="none" aria-hidden="true">
+      <rect x="2"  y="28" width="26" height="34" rx="7" fill="var(--tile-b)"/>
+      <rect x="32" y="28" width="26" height="34" rx="7" fill="var(--tile-a)"/>
+      <rect x="92" y="28" width="26" height="34" rx="7" fill="var(--tile-g)"/>
+      <rect class="lift" x="62" y="28" width="26" height="34" rx="7" fill="var(--tile-r)"/>
+    </svg></div>
+    <h1 class="serif">Roszada</h1>
+    <p class="tag">Codzienna łamigłówka logiczna. Rozłóż to, co już leży, żeby zmieścić to, co masz w ręce.</p>
+    <div class="menu">
+      <button class="btn go" id="homePlay">Graj</button>
+      <button class="btn" id="homeLevels">Wybierz planszę</button>
+      <button class="btn" id="homeRules">Zasady</button>
+    </div>
+    <p class="credit">
+      Prototyp, projekt i zasady: <b id="author">Paweł Wronowski</b>.<br>
+      Wersja demonstracyjna przygotowana na konkurs „Nowa gra w aplikacji Wyborczej”.
+      Gra, kod i mechanika pozostają własnością autora.
+    </p>
+  </div>
+</section>
+
+<!-- ═══ LIST ═══ -->
+<section class="screen" id="list">
+  <div class="bar">
+    <button class="icon" id="listBack">←</button>
+    <button class="lockup" data-home>
+      <svg width="36" height="21" viewBox="0 0 36 21" aria-hidden="true">
+        <rect x="0" y="7" width="9.5" height="13.5" rx="2.6" fill="var(--tile-b)"/>
+        <rect x="12" y="7" width="9.5" height="13.5" rx="2.6" fill="var(--tile-a)"/>
+        <rect x="24" y="1.5" width="9.5" height="13.5" rx="2.6" fill="var(--tile-r)"
+              transform="rotate(9 28.75 8.25)"/>
+      </svg>
+      <span>Roszada</span>
+    </button>
+    <button class="icon" id="listRules">?</button>
+  </div>
+  <div class="intro">
+    <h2 class="serif">Sześć plansz.<br>Trzy poziomy trudności.</h2>
+    <p>Zagraj wszystkie płytki z ręki tak, żeby każdy układ na stole został poprawny.
+       Wolno rozłożyć i poskładać na nowo wszystko, co już leży.</p>
+  </div>
+  <div class="listGrid" id="listGrid"></div>
+</section>
+
+<!-- ═══ PLAY ═══ -->
+<section class="screen" id="play" hidden>
+  <div class="bar">
+    <button class="icon" id="back">←</button>
+    <button class="lockup" data-home>
+      <svg width="36" height="21" viewBox="0 0 36 21" aria-hidden="true">
+        <rect x="0" y="7" width="9.5" height="13.5" rx="2.6" fill="var(--tile-b)"/>
+        <rect x="12" y="7" width="9.5" height="13.5" rx="2.6" fill="var(--tile-a)"/>
+        <rect x="24" y="1.5" width="9.5" height="13.5" rx="2.6" fill="var(--tile-r)"
+              transform="rotate(9 28.75 8.25)"/>
+      </svg>
+      <span>Roszada</span>
+    </button>
+    <button class="icon" id="help">?</button>
+  </div>
+
+  <div class="band">
+    <div class="who">
+      <span class="nm" id="name"></span>
+      <div style="display:flex;align-items:center">
+        <span class="diff" id="diff"></span><span class="difflbl" id="difflbl"></span>
+      </div>
+    </div>
+    <div class="rt">
+      <div class="count" id="count"></div>
+      <div class="freeing" id="freeing"></div>
+    </div>
+  </div>
+
+  <main>
+    <div class="cap">Stół</div>
+    <div id="table"></div>
+    <div id="newset">nowy układ</div>
+
+  </main>
+
+  <div class="rack">
+    <div class="cap">Twoje płytki</div>
+    <div id="hand"></div>
+
+    <div class="status">
+      <div class="scorestars" id="scoreStars"></div>
+      <div class="metrics">ruchy <b id="moved">0</b> · norma <b id="par"></b></div>
+      <div class="clock" id="clock">00:00</div>
+    </div>
+    <div class="hearts" id="hearts" style="justify-content:center;padding:6px 0 2px"></div>
+
+    <div class="acts">
+      <button class="btn" id="undo">Cofnij</button>
+      <button class="btn" id="hint">Podpowiedź</button>
+      <button class="btn" id="reset">Od nowa</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ RULES ═══ -->
+<section class="screen" id="rules" hidden>
+  <div class="bar">
+    <span class="icon" style="visibility:hidden">←</span>
+    <h1>Zasady</h1>
+    <span class="icon" style="visibility:hidden">?</span>
+  </div>
+  <div class="sheet">
+    <h2 class="serif">Jak grać</h2>
+    <p class="lead">Masz kilka płytek na ręce. Zagraj wszystkie tak, żeby na koniec
+      każdy układ na stole był poprawny. Układ jest poprawny na jeden z dwóch sposobów.</p>
+
+    <div class="rule">
+      <h3>Seria</h3>
+      <div class="mini" id="exRun"></div>
+      <p>Trzy lub więcej kolejnych liczb w jednym kolorze.</p>
+    </div>
+
+    <div class="rule">
+      <h3>Grupa</h3>
+      <div class="mini" id="exGroup"></div>
+      <p>Ta sama liczba w trzech lub czterech różnych kolorach. Nigdy dwa razy ten sam kolor.</p>
+    </div>
+
+    <div class="rule">
+      <h3>Wolno rozłożyć wszystko</h3>
+      <p>To jest cała gra. Każdy układ na stole można rozebrać i poskładać inaczej.
+        Gdy z długiej serii wyjmiesz płytkę ze środka, seria sama rozpada się na dwie —
+        o ile obie części zostaną poprawne.</p>
+      <div class="demo" id="demo"></div>
+    </div>
+
+    <div class="rule">
+      <h3>Norma i limit ruchów</h3>
+      <p>Każda plansza ma wyliczoną <b>normę</b> — najmniejszą możliwą liczbę przełożonych płytek.
+        Ruchy ponad normę zużywają zapas, pokazany kropkami. Gdy zapas się skończy, plansza
+        jest przegrana. Koszt liczy się w płytkach: przełożenie trzech naraz kosztuje trzy.</p>
+    </div>
+
+    <div class="rule">
+      <h3>Sterowanie</h3>
+      <p>Dotknij płytkę, żeby ją podnieść — dotknij ponownie, żeby odłożyć. Możesz podnieść
+        kilka naraz, z różnych układów. Potem dotknij miejsca docelowego: paska przy układzie,
+        ręki albo pola „nowy układ”. Można też po prostu przeciągać.</p>
+    </div>
+
+    <button class="btn go" id="rulesOk" style="width:100%">Rozumiem</button>
+  </div>
+</section>
+
+<!-- ═══ END ═══ -->
+<section class="screen" id="end" hidden>
+  <div class="end">
+    <div class="endStars" id="endStars"></div>
+    <h2 class="serif" id="endTitle"></h2>
+    <div class="endLine" id="endLine"></div>
+    <div class="endNote" id="endNote"></div>
+    <div class="acts">
+      <button class="btn" id="endAgain">Jeszcze raz</button>
+      <button class="btn go" id="endNext">Dalej</button>
+      <button class="btn" id="endSolution" style="flex:1 1 100%">Pokaż rozwiązanie</button>
+      <button class="btn" id="endMenu" style="flex:1 1 100%;border:none">Lista plansz</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ SOLUTION ═══ -->
+<section class="screen" id="sol" hidden>
+  <div class="bar">
+    <button class="icon" id="solBack">←</button>
+    <h1>Rozwiązanie</h1>
+    <span class="icon" style="visibility:hidden">?</span>
+  </div>
+  <div class="sheet">
+    <p class="lead">Tak wygląda plansza ułożona poprawnie.</p>
+    <div id="solBox"></div>
+  </div>
+</section>
+
+<div id="ghost"></div>
+
+<script>
+/* =================================================================================================
+   PART ONE — THE ENGINE
+   resources/js/games/rummikub/rules.js, verbatim but for the `export` keywords.
+   ============================================================================================== */
+
+/**
+ * RUMMIKUB'S RULES, IN ONE PLACE.
+ *
+ * These four functions -- validSet, tidy, splitRun, solveAll -- are the game. They existed twice in
+ * the original build, once in the game and once in the level editor, phrased differently and
+ * currently equivalent, which is one copy too many for a thing scores are derived from. This module
+ * is the single copy: the game imports it, the generator imports it, the verifier imports it.
+ *
+ * There is a deliberate second implementation in PHP (App\Games\Rummikub\Rules) for server-side
+ * verification, pinned to the same fixtures as this one by a test that runs both and compares. Two
+ * languages, one set of rules, one set of examples.
+ *
+ * TILE IDS ARE INSTANCE-UNIQUE: 'R7#1', 'R7#2'. A physical Rummikub set has two of every tile, and
+ * the original identified a tile BY its value -- so with two R7s in play, consuming one removed
+ * both and the solver silently returned partitions that did not cover the input. Every function here
+ * compares by VALUE (colour and number, derived from the id) and identifies by ID.
+ *
+ * No DOM, no globals, no randomness: everything here is a pure function of its arguments.
+ */
+
+/** The colour of a tile: the first character of its id. */
+const col = (id) => id[0]
+
+/** The number of a tile: whatever is between the colour and the instance marker. */
+const num = (id) => parseInt(id.slice(1), 10)
+
+/** The value of a tile -- colour and number -- with the instance dropped. Two tiles may share one. */
+const value = (id) => id.split('#')[0]
+
+/** Canonical order: colour, then number. Sorting by this is what makes the solver correct. */
+const ord = (id) => col(id) + String(num(id)).padStart(2, '0') + '#' + (id.split('#')[1] ?? '')
+
+/**
+ * IS THIS A VALID SET?
+ *
+ * A GROUP is one number in three or four DIFFERENT colours. A RUN is three or more consecutive
+ * numbers in one colour. Nothing else counts.
+ *
+ * Both duplicate cases fall out of comparing by value rather than by identity: two R7s in a group
+ * are one colour twice, and two R7s in a run are not consecutive.
+ */
+function validSet(ids) {
+    if (ids.length < 3) return false
+
+    const numbers = ids.map(num)
+    const colours = ids.map(col)
+    const allSameNumber = numbers.every((n) => n === numbers[0])
+
+    // A group is capped at four, because there are only four colours.
+    if (allSameNumber) {
+        if (ids.length > 4) return false
+
+        return new Set(colours).size === ids.length
+    }
+
+    if (colours.every((c) => c === colours[0])) {
+        const sorted = [...numbers].sort((a, b) => a - b)
+
+        for (let i = 1; i < sorted.length; i++) {
+            if (sorted[i] !== sorted[i - 1] + 1) return false
+        }
+
+        return numbers.every((n, i) => n === numbers[i]) && isAscending(numbers)
+    }
+
+    return false
+}
+
+/** A run has to be IN ORDER to be valid; tidy() is what stops that being a trap. */
+function isAscending(numbers) {
+    for (let i = 1; i < numbers.length; i++) {
+        if (numbers[i] !== numbers[i - 1] + 1) return false
+    }
+
+    return true
+}
+
+/**
+ * A set that would be a valid run once ordered gets tidied automatically -- nobody should lose to
+ * tile order.
+ */
+function tidy(ids) {
+    if (ids.length < 3) return ids
+    if (!ids.every((x) => col(x) === col(ids[0]))) return ids
+
+    const sorted = [...ids].sort((a, b) => num(a) - num(b))
+
+    return validSet(sorted) ? sorted : ids
+}
+
+/**
+ * THE SPLIT MECHANIC, and the heart of the game: pull a tile out of the middle of a long run and it
+ * becomes two runs, if both halves are still valid.
+ *
+ * A group never splits -- there is nothing to be consecutive about.
+ */
+function splitRun(ids) {
+    if (ids.length < 2) return [ids]
+    if (!ids.every((x) => col(x) === col(ids[0]))) return [ids]
+
+    const sorted = [...ids].sort((a, b) => num(a) - num(b))
+    const parts = []
+    let cur = [sorted[0]]
+
+    for (let i = 1; i < sorted.length; i++) {
+        if (num(sorted[i]) === num(sorted[i - 1]) + 1) cur.push(sorted[i])
+        else {
+            parts.push(cur)
+            cur = [sorted[i]]
+        }
+    }
+
+    parts.push(cur)
+
+    if (parts.length < 2) return [ids]
+
+    return parts.every(validSet) ? parts : [ids]
+}
+
+/**
+ * Partition every tile in play into valid sets, or return null.
+ *
+ * WORKS FROM ANY BOARD STATE, not just a starting one -- which is what makes the hint stay correct
+ * after a pair have rearranged everything, and what makes dead-end detection possible: null means
+ * this position can no longer be solved, whatever anybody does next.
+ *
+ * Sorting first is what makes it both correct and fast: with tiles in colour-then-number order, any
+ * RUN containing the lowest remaining tile must START at it, so runs are never enumerated in both
+ * directions. Memoised on the remaining list, which is canonical for the same reason.
+ */
+function solveAll(tiles) {
+    const memo = new Map()
+
+    function go(rem) {
+        if (!rem.length) return []
+
+        const k = rem.join('|')
+
+        if (memo.has(k)) return memo.get(k)
+
+        const first = rem[0]
+        const rest = rem.slice(1)
+        const cands = []
+
+        /*
+         * GROUPS: the same number in other colours. Candidates are drawn per COLOUR rather than per
+         * tile, because two instances of one value can never be in a group together and offering
+         * both produces identical work twice.
+         */
+        const byColour = new Map()
+
+        for (const x of rest) {
+            if (num(x) !== num(first) || col(x) === col(first)) continue
+            if (!byColour.has(col(x))) byColour.set(col(x), x)
+        }
+
+        const same = [...byColour.values()]
+
+        for (let need = 2; need <= Math.min(3, same.length); need++) {
+            ;(function comb(st, cur) {
+                if (cur.length === need) {
+                    cands.push([first, ...cur])
+
+                    return
+                }
+
+                for (let i = st; i < same.length; i++) comb(i + 1, [...cur, same[i]])
+            })(0, [])
+        }
+
+        // RUNS: upward from the lowest tile, one instance per number.
+        const line = rest.filter((x) => col(x) === col(first))
+        const run = [first]
+        let n = num(first)
+
+        for (;;) {
+            const nx = line.find((x) => num(x) === n + 1)
+
+            if (!nx) break
+
+            run.push(nx)
+            n++
+
+            if (run.length >= 3) cands.push(run.slice())
+        }
+
+        for (const c of cands) {
+            if (!validSet(c)) continue
+
+            const used = new Set(c)
+            const left = rem.filter((x) => !used.has(x))
+            const r = go(left)
+
+            if (r !== null) {
+                const out = [c, ...r]
+
+                memo.set(k, out)
+
+                return out
+            }
+        }
+
+        memo.set(k, null)
+
+        return null
+    }
+
+    return go([...tiles].sort((a, b) => (ord(a) < ord(b) ? -1 : 1)))
+}
+
+/**
+ * EVERY partition, for the difficulty signal -- how many ways a board can be solved.
+ *
+ * Capped, and the cap is REPORTED. The original returned exactly 400 when it truncated, which was
+ * then compared against 1 to decide uniqueness: a silent clip that changes a verdict is the worst
+ * kind of wrong. This returns { count, capped } so a caller can say "≥400" and mean it.
+ */
+function allPartitions(tiles, cap = 400) {
+    const sorted = [...tiles].sort((a, b) => (ord(a) < ord(b) ? -1 : 1))
+    const out = []
+    let capped = false
+
+    function go(rem, acc) {
+        if (capped) return
+
+        if (!rem.length) {
+            out.push(acc)
+
+            if (out.length >= cap) capped = true
+
+            return
+        }
+
+        const first = rem[0]
+        const rest = rem.slice(1)
+        const cands = []
+
+        const byColour = new Map()
+
+        for (const x of rest) {
+            if (num(x) !== num(first) || col(x) === col(first)) continue
+            if (!byColour.has(col(x))) byColour.set(col(x), x)
+        }
+
+        const same = [...byColour.values()]
+
+        for (let need = 2; need <= Math.min(3, same.length); need++) {
+            ;(function comb(st, cur) {
+                if (cur.length === need) {
+                    cands.push([first, ...cur])
+
+                    return
+                }
+
+                for (let i = st; i < same.length; i++) comb(i + 1, [...cur, same[i]])
+            })(0, [])
+        }
+
+        const line = rest.filter((x) => col(x) === col(first))
+        const run = [first]
+        let n = num(first)
+
+        for (;;) {
+            const nx = line.find((x) => num(x) === n + 1)
+
+            if (!nx) break
+
+            run.push(nx)
+            n++
+
+            if (run.length >= 3) cands.push(run.slice())
+        }
+
+        for (const c of cands) {
+            if (!validSet(c)) continue
+
+            const used = new Set(c)
+
+            go(
+                rem.filter((x) => !used.has(x)),
+                [...acc, c],
+            )
+
+            if (capped) return
+        }
+    }
+
+    go(sorted, [])
+
+    return { partitions: out, count: out.length, capped }
+}
+
+/** Solved: the hand is empty and every set on the table is valid. */
+function isSolved(state) {
+    return state.hand.length === 0 && state.sets.length > 0 && state.sets.every(validSet)
+}
+
+/** A canonical string for a position, for memos, undo comparison and search. */
+function snapshot(state) {
+    return JSON.stringify({
+        sets: state.sets.map((s) => [...s].sort()).sort(),
+        hand: [...state.hand].sort(),
+    })
+}
+
+/** Every tile in play, board and hand together. */
+const allTiles = (state) => [...state.sets.flat(), ...state.hand]
+
+/**
+ * THE STATE TRANSITION: move these tiles to this target.
+ *
+ * Pure -- it takes a state and returns a new one, or null when the move changes nothing. The move
+ * counter, the undo stack and anything about the screen live with the caller; this is only the rule
+ * for what the board becomes.
+ *
+ * COST IS TILES MOVED, which the caller adds: `moves += ids.length`. That choice is what makes par
+ * searchable in single-tile space -- a multi-tile gesture can never cost less than the same tiles
+ * moved one at a time, so no optimal solution can exploit multi-select. Multi-select is ergonomics
+ * and cannot distort a score.
+ *
+ * @param {{sets: string[][], hand: string[]}} state
+ * @param {string[]} ids
+ * @param {{where: 'set'|'new'|'hand', si?: number, idx?: number}} target
+ */
+function place(state, ids, target) {
+    if (!ids || !ids.length || !target) return null
+
+    const before = snapshot(state)
+    const sets = state.sets.map((s) => [...s])
+    const hand = [...state.hand]
+
+    const tgt = target.where === 'set' ? sets[target.si] : null
+
+    if (target.where === 'set' && !tgt) return null
+
+    // Already there: not a move.
+    if (tgt && ids.some((id) => tgt.includes(id))) return null
+
+    const touched = new Set()
+
+    for (const id of ids) {
+        let found = false
+
+        for (let i = 0; i < sets.length && !found; i++) {
+            const j = sets[i].indexOf(id)
+
+            if (j >= 0) {
+                touched.add(sets[i])
+                sets[i].splice(j, 1)
+                found = true
+            }
+        }
+
+        if (!found) {
+            const h = hand.indexOf(id)
+
+            if (h >= 0) hand.splice(h, 1)
+        }
+    }
+
+    /* A run that has just lost a middle tile becomes two runs -- see splitRun. */
+    for (const arr of touched) {
+        const i = sets.indexOf(arr)
+
+        if (i < 0) continue
+
+        const parts = splitRun(arr)
+
+        if (parts.length > 1) sets.splice(i, 1, ...parts)
+    }
+
+    if (tgt) {
+        const i = sets.indexOf(tgt)
+
+        tgt.splice(Math.min(target.idx ?? tgt.length, tgt.length), 0, ...ids)
+
+        if (i >= 0) sets[i] = tidy(tgt)
+    } else if (target.where === 'new') {
+        sets.push([...ids])
+    } else {
+        hand.push(...ids)
+    }
+
+    const next = {
+        sets: sets.filter((a) => a.length > 0).map(tidy),
+        hand,
+    }
+
+    if (snapshot(next) === before) return null
+
+    return next
+}
+
+/* =================================================================================================
+   PART TWO — THE LEVELS
+   Six of the generated pool, chosen for a curve: two easy, two medium, two hard. `par` is the
+   PROVEN minimum tiles moved, confirmed by bounded search, not the number the generator used.
+   `freeing` is how many table tiles must move before anything in hand fits — the axis that
+   actually correlates with difficulty. `decoys` are valid sets the solution must NOT touch.
+   ============================================================================================== */
+
+const LEVELS = [
+  {
+    "id": "T1-25558736",
+    "tier": 1,
+    "par": 3,
+    "board": "R5,R6,R7,R8,R9,R10 | A5,G5,B5 | B9,B10,B11 | R9,R10,R11",
+    "hand": "R12,R8,R5",
+    "freeing": 0,
+    "setsDisturbed": 0,
+    "decoys": [],
+    "breaksValidSet": true,
+    "solutions": 6,
+    "seed": 25558736
+  },
+  {
+    "id": "T2-25637926",
+    "tier": 2,
+    "par": 3,
+    "board": "A7,A8,A9,A10 | G7,R7,A7 | G9,R9,B9 | A11,B11,G11",
+    "hand": "A13,A12,A11",
+    "freeing": 0,
+    "setsDisturbed": 0,
+    "decoys": [
+      {
+        "tiles": "A11,B11,G11",
+        "kind": "colour-blocked-group",
+        "kinds": [
+          "colour-blocked-group",
+          "near-miss-pair",
+          "minimum-length-set",
+          "shared-value-trap"
+        ]
+      }
+    ],
+    "breaksValidSet": true,
+    "solutions": 8,
+    "seed": 25637926
+  },
+  {
+    "id": "T3-31220821",
+    "tier": 3,
+    "par": 3,
+    "board": "R1,R2,R3,R4,R5 | B4,R4,G4,A4 | A7,G7,R7",
+    "hand": "B1,G1",
+    "freeing": 1,
+    "setsDisturbed": 2,
+    "decoys": [],
+    "breaksValidSet": true,
+    "solutions": 1,
+    "seed": 31220821
+  },
+  {
+    "id": "T3-25915091",
+    "tier": 3,
+    "par": 5,
+    "board": "R2,R3,R4 | A1,G1,B1 | G3,R3,B3 | R9,R10,R11,R12 | B2,R2,A2 | B10,B11,B12,B13",
+    "hand": "G12,R12,B12,R1",
+    "freeing": 1,
+    "setsDisturbed": 4,
+    "decoys": [
+      {
+        "tiles": "R9,R10,R11,R12",
+        "kind": "near-miss-pair",
+        "kinds": [
+          "near-miss-pair",
+          "shared-value-trap"
+        ]
+      },
+      {
+        "tiles": "B2,R2,A2",
+        "kind": "near-miss-pair",
+        "kinds": [
+          "near-miss-pair",
+          "minimum-length-set"
+        ]
+      },
+      {
+        "tiles": "B10,B11,B12,B13",
+        "kind": "near-miss-pair",
+        "kinds": [
+          "near-miss-pair",
+          "shared-value-trap"
+        ]
+      }
+    ],
+    "breaksValidSet": true,
+    "solutions": 2,
+    "seed": 25915091
+  },
+  {
+    "id": "T4-29193557",
+    "tier": 4,
+    "par": 6,
+    "board": "R1,R2,R3,R4 | A5,R5,B5 | A12,B12,R12 | B4,B5,B6,B7",
+    "hand": "R6,R5,G3,A3,B3",
+    "freeing": 1,
+    "setsDisturbed": 1,
+    "decoys": [
+      {
+        "tiles": "B4,B5,B6,B7",
+        "kind": "run-looks-extendable",
+        "kinds": [
+          "run-looks-extendable",
+          "near-miss-pair",
+          "shared-value-trap"
+        ]
+      }
+    ],
+    "breaksValidSet": true,
+    "solutions": 2,
+    "seed": 29193557
+  },
+  {
+    "id": "T5-23784880",
+    "tier": 5,
+    "par": 6,
+    "board": "B2,B3,B4 | B5,B6,B7,B8,B9 | A12,B12,R12 | G6,G7,G8,G9,G10,G11 | G12,A12,R12 | G2,R2,A2 | A3,A4,A5",
+    "hand": "R2,G2,G5,B12",
+    "freeing": 2,
+    "setsDisturbed": 2,
+    "decoys": [
+      {
+        "tiles": "G2,R2,A2",
+        "kind": "colour-blocked-group",
+        "kinds": [
+          "colour-blocked-group",
+          "minimum-length-set",
+          "shared-value-trap"
+        ]
+      },
+      {
+        "tiles": "A3,A4,A5",
+        "kind": "run-looks-extendable",
+        "kinds": [
+          "run-looks-extendable",
+          "near-miss-pair",
+          "minimum-length-set",
+          "shared-value-trap"
+        ]
+      }
+    ],
+    "breaksValidSet": true,
+    "solutions": 30,
+    "seed": 23784880
+  }
+]
+
+/* =================================================================================================
+   PART THREE — THE GAME
+   Plain DOM. The original is Vue plus a server; see the note at the top of this file for what was
+   dropped and why.
+   ============================================================================================== */
+
+/**
+ * INSTANCE-UNIQUE IDS ARE STAMPED HERE, and this is the single most important line in the file.
+ *
+ * A physical Rummikub set has TWO of every tile. The original prototype identified a tile BY its
+ * value -- the string 'R7' -- and removal was `filter(x => !used.includes(x))`, so with two R7s in
+ * play, consuming one consumed BOTH. The solver then returned partitions that did not cover its own
+ * input, silently. Measured, on ["R7","R7","B7","A7"]: one R7 simply vanished.
+ *
+ * So a level's tiles arrive as values ('R7') and become instances ('R7#1', 'R7#2') before anything
+ * touches them. Every function in the engine compares by VALUE and identifies by ID.
+ */
+function stamp(values) {
+    const seen = new Map()
+
+    return values.map((v) => {
+        const n = (seen.get(v) ?? 0) + 1
+
+        seen.set(v, n)
+
+        return `${v}#${n}`
+    })
+}
+
+/** 'G5,G6,G7 | B2,A2,G2' and 'R9,R10' -> a state with instance ids. */
+function levelState(level) {
+    const flat = stamp([
+        ...level.board.split('|').flatMap((s) => s.split(',')).map((s) => s.trim()).filter(Boolean),
+        ...level.hand.split(',').map((s) => s.trim()).filter(Boolean),
+    ])
+
+    let at = 0
+    const sets = level.board.split('|').map((s) => {
+        const n = s.split(',').filter((x) => x.trim()).length
+
+        return flat.slice(at, at += n)
+    })
+
+    return { sets, hand: flat.slice(at) }
+}
+
+/*
+ * THE WATERMARK IS DRAWN, NOT TYPED. The text glyphs ● ◆ ▲ ■ render at four different visual
+ * sizes in every font, so the tiles looked inconsistent. These four paths are hand-sized to the
+ * same area (~353 square units in a 28x28 box), which is what makes them read as one family.
+ */
+const GLYPHS = {
+    R: '<svg viewBox="0 0 28 28"><circle cx="14" cy="14" r="10.6"/></svg>',
+    B: '<svg viewBox="0 0 28 28"><path d="M14 .7 27.3 14 14 27.3.7 14Z"/></svg>',
+    A: '<svg viewBox="0 0 28 28"><path d="M14 .8 27.4 27.2H.6Z"/></svg>',
+    G: '<svg viewBox="0 0 28 28"><rect x="4.6" y="4.6" width="18.8" height="18.8" rx="3"/></svg>',
+}
+
+/* ── state ────────────────────────────────────────────────────────────────── */
+
+let level = null
+let state = { sets: [], hand: [] }
+let moved = 0
+let undoStack = []
+let held = []            // the tiles picked up
+let hintIds = []
+let solved = false
+
+const $ = (id) => document.getElementById(id)
+
+/* ── rendering ────────────────────────────────────────────────────────────── */
+
+function tileEl(id) {
+    const el = document.createElement('span')
+    const c = col(id)
+
+    el.className = 'tile'
+    el.dataset.tile = id
+    el.style.setProperty('--tile-colour', `var(--tile-${c.toLowerCase()})`)
+
+    if (held.includes(id)) el.classList.add('held')
+    if (hintIds.includes(id)) el.classList.add('hint')
+
+    el.innerHTML =
+        '<span class="tile__aura"></span>'
+        + `<span class="tile__face"><i class="tile__glyph">${GLYPHS[c] ?? '●'}</i></span>`
+        + `<span class="tile__num${num(id) > 9 ? ' wide' : ''}">${num(id)}</span>`
+
+    return el
+}
+
+/** A destination bar. Only ever LIT while something is held; always in the layout. */
+function dropEl(target) {
+    const el = document.createElement('span')
+
+    el.className = 'drop'
+    el.dataset.drop = JSON.stringify(target)
+
+    return el
+}
+
+function render() {
+    document.body.classList.toggle('holding', held.length > 0)
+
+    const table = $('table')
+
+    table.textContent = ''
+
+    state.sets.forEach((set, si) => {
+        const wrap = document.createElement('div')
+
+        wrap.className = 'set' + (validSet(set) ? '' : ' bad')
+        wrap.dataset.set = si
+
+        wrap.appendChild(dropEl({ where: 'set', si, idx: 0 }))
+
+        set.forEach((id, idx) => {
+            const gap = document.createElement('span')
+
+            gap.className = 'gap'
+            gap.dataset.gap = `${si}:${idx}`
+            wrap.appendChild(gap)
+
+            wrap.appendChild(tileEl(id))
+        })
+
+        const tail = document.createElement('span')
+
+        tail.className = 'gap'
+        tail.dataset.gap = `${si}:${set.length}`
+        wrap.appendChild(tail)
+
+        wrap.appendChild(dropEl({ where: 'set', si, idx: set.length }))
+        table.appendChild(wrap)
+    })
+
+    const hand = $('hand')
+
+    hand.textContent = ''
+    hand.appendChild(dropEl({ where: 'hand' }))
+    state.hand.forEach((id) => hand.appendChild(tileEl(id)))
+
+    paintStatus()
+    check()
+}
+
+/* ── the one place a move happens ─────────────────────────────────────────── */
+
+/**
+ * COST IS TILES MOVED, which is added HERE: `moved += ids.length`.
+ *
+ * That single choice is what makes par computable. A multi-tile gesture costs exactly the sum of
+ * its tiles, so no optimal solution can ever be cheaper by using multi-select -- which means the
+ * minimum can be searched in SINGLE-TILE move space, and the branching factor collapses from
+ * (every subset x every target) to (every tile x every target). Ergonomics cannot distort a score.
+ */
+function move(ids, target) {
+    const next = place(state, ids, target)
+
+    if (!next) return false
+
+    undoStack.push({ state, moved })
+    state = next
+    moved += ids.length
+    startClock()
+    held = []
+    hintIds = []
+
+    render()
+
+    return true
+}
+
+/* ── win, and the dead end ────────────────────────────────────────────────── */
+
+function check() {
+    if (isSolved(state)) {
+        solved = true
+        onWin()
+
+        return
+    }
+
+    solved = false
+
+    /*
+     * THE DEAD-END GUARD, KEPT DELIBERATELY AND AS WRITTEN CANNOT FIRE.
+     *
+     * solveAll is computed over allTiles() -- every tile in play -- and place() only ever
+     * REDISTRIBUTES them, so the multiset is invariant and the answer is identical for every
+     * position reachable from a given board. Every shipped board starts solvable, so this is
+     * permanently false. Measured: 19 levels x 4,965 random legal moves, multiset changed 0 times.
+     *
+     * It is kept because it becomes live the moment a tile can LEAVE play -- a discard, a draw
+     * pile, a joker that is spent. Loss in this build is a MOVE BUDGET instead, which is a real
+     * condition: see spendCheck().
+     */
+    if (solveAll(allTiles(state)) === null) {
+        onDead()
+
+        return
+    }
+
+    spendCheck()
+}
+
+/* ── the hint ─────────────────────────────────────────────────────────────── */
+
+/**
+ * THE HINT WORKS FROM ANY BOARD STATE, and that is a genuinely good property of `solveAll` rather
+ * than a feature that had to be built.
+ *
+ * It is not a scripted "step 3 of the solution": it re-solves the CURRENT position from scratch,
+ * so it stays correct after a pair have rearranged the table into something the level's author
+ * never saw. A scripted hint would be wrong the moment anybody deviated, which is exactly when
+ * somebody asks for one.
+ */
+function hint() {
+    const solution = solveAll(allTiles(state))
+
+    if (!solution) return
+
+    const already = new Set(state.sets.filter(validSet).map((s) => [...s].sort().join(',')))
+    const wanted = solution.find((s) => !already.has([...s].sort().join(',')))
+
+    hintIds = wanted ?? []
+    render()
+}
+
+/* ── loading ──────────────────────────────────────────────────────────────── */
+
+function load(i) {
+    level = LEVELS[i]
+    state = levelState(level)
+    moved = 0
+    undoStack = []
+    held = []
+    hintIds = []
+
+    solved = false
+    onLevelLoaded(i)
+    render()
+}
+
+/* ── input: one code path for tap and drag ────────────────────────────────── */
+
+/**
+ * A POINTER THAT TRAVELS MORE THAN THIS IS DRAGGING, NOT TAPPING.
+ *
+ * One path serves both, which is what makes tap-to-place work inside hosts that claim swipes for
+ * their own sheet -- and on a kiosk tablet that is the path that matters most.
+ */
+const DRAG_PX = 9
+
+let press = null
+
+/**
+ * TILES SELECT, DESTINATIONS PLACE, AND THEY ARE DIFFERENT THINGS.
+ *
+ * Both actions used to live on tiles, which works only while a selection is confined to one set:
+ * "a tap on a tile in another set" can then only mean "put them there". With free-form selection
+ * ACROSS sets and hand it means both things at once -- and it chose wrong, so a pair tapping the
+ * set they meant to fill widened their selection instead, again and again. That is what "the board
+ * stopped responding" actually was.
+ *
+ * So a tap on a tile can never place, and a tap on a target can never select.
+ */
+function onDown(e) {
+    if (solved) return
+
+    const tile = e.target.closest('[data-tile]')
+    const drop = e.target.closest('[data-drop]')
+
+    if (drop) {
+        if (held.length) move(held, JSON.parse(drop.dataset.drop))
+
+        return
+    }
+
+    if (e.target.closest('#newset')) {
+        if (held.length) move(held, { where: 'new' })
+
+        return
+    }
+
+    if (!tile) return
+
+    e.preventDefault()
+
+    press = { id: tile.dataset.tile, x: e.clientX, y: e.clientY, dragging: false, el: tile }
+
+    /* Keeps the drag alive when the pointer leaves the tile it started on. */
+    tile.setPointerCapture?.(e.pointerId)
+}
+
+function onMove(e) {
+    if (!press) return
+
+    if (!press.dragging) {
+        if (Math.hypot(e.clientX - press.x, e.clientY - press.y) < DRAG_PX) return
+
+        press.dragging = true
+
+        /* A drag carries the WHOLE selection: "drag the tiles I picked up" has to mean that. */
+        if (!held.includes(press.id)) held = [press.id]
+
+        render()
+        drawGhost()
+    }
+
+    moveGhost(e)
+    showGapUnder(e)
+}
+
+function onUp(e) {
+    if (!press) return
+
+    const wasDragging = press.dragging
+    const id = press.id
+
+    clearGhost()
+    clearGaps()
+
+    if (!wasDragging) {
+        /* A TAP TOGGLES. Free-form: any tile, in any set or the hand, in any combination. */
+        held = held.includes(id) ? held.filter((x) => x !== id) : [...held, id]
+        press = null
+        render()
+
+        return
+    }
+
+    press = null
+
+    const target = targetUnder(e.clientX, e.clientY)
+
+    if (target) move(held, target)
+    else render()
+}
+
+/**
+ * POINTERCANCEL DEGRADES TO "SELECTED" RATHER THAN DROPPING THE MOVE.
+ *
+ * When a host or the browser steals the gesture mid-drag, the tiles the pair had hold of stay
+ * picked up and a tap finishes the move. Dropping the move instead would lose a tile out from
+ * under somebody, which is the worse failure by a distance.
+ */
+function onCancel() {
+    if (!press) return
+
+    press = null
+    clearGhost()
+    clearGaps()
+    render()
+}
+
+/* ── drag: geometry, not logic ────────────────────────────────────────────── */
+
+/*
+ * HIT-TESTING STAYS DOM-BASED ON PURPOSE. `elementFromPoint` and `getBoundingClientRect` are
+ * genuine geometry rather than something worth modelling -- dropping ON a tile means "land in that
+ * tile's set, at that tile's position", and only the DOM knows where that is.
+ */
+function targetUnder(x, y) {
+    for (const el of document.elementsFromPoint(x, y)) {
+        if (el.dataset?.drop) return JSON.parse(el.dataset.drop)
+        if (el.closest?.('#newset')) return { where: 'new' }
+
+        const tile = el.closest?.('[data-tile]')
+
+        if (tile && !held.includes(tile.dataset.tile)) {
+            const set = tile.closest('[data-set]')
+
+            if (!set) return { where: 'hand' }
+
+            const si = Number(set.dataset.set)
+            const idx = state.sets[si].indexOf(tile.dataset.tile)
+            const box = tile.getBoundingClientRect()
+
+            return { where: 'set', si, idx: x > box.left + box.width / 2 ? idx + 1 : idx }
+        }
+
+        if (el.id === 'hand' || el.closest?.('#hand')) return { where: 'hand' }
+    }
+
+    return null
+}
+
+function drawGhost() {
+    const g = $('ghost')
+
+    g.textContent = ''
+    held.forEach((id) => g.appendChild(tileEl(id)))
+    document.querySelectorAll('[data-tile]').forEach((el) => {
+        if (held.includes(el.dataset.tile)) el.classList.add('ghosted')
+    })
+}
+
+function moveGhost(e) {
+    const g = $('ghost')
+
+    g.style.transform = `translate(${e.clientX - 20}px, ${e.clientY - 34}px)`
+}
+
+function clearGhost() {
+    $('ghost').textContent = ''
+    document.querySelectorAll('.ghosted').forEach((el) => el.classList.remove('ghosted'))
+}
+
+/** THE INSERTION GAP: the set parts where the tile would land, while the pointer is still down. */
+function showGapUnder(e) {
+    clearGaps()
+
+    const target = targetUnder(e.clientX, e.clientY)
+
+    if (!target || target.where !== 'set') return
+
+    const gap = document.querySelector(`[data-gap="${target.si}:${target.idx}"]`)
+
+    if (gap) gap.classList.add('open')
+}
+
+function clearGaps() {
+    document.querySelectorAll('.gap.open').forEach((el) => el.classList.remove('open'))
+    document.querySelectorAll('.over').forEach((el) => el.classList.remove('over'))
+}
+
+/* ── wiring ───────────────────────────────────────────────────────────────── */
+
+document.addEventListener('pointerdown', onDown, { passive: false })
+document.addEventListener('pointermove', onMove)
+document.addEventListener('pointerup', onUp)
+document.addEventListener('pointercancel', onCancel)
+
+
+/* =================================================================================================
+   PART FOUR — THE SHELL
+   Everything a player sees that is not a tile. Difficulty band, move budget, clock, end screens.
+   The engine and the interaction above are untouched.
+   ============================================================================================== */
+
+const NAMES = ['Łatwa', 'Łatwa', 'Średnia', 'Średnia', 'Trudna', 'Trudna']
+
+/**
+ * DIFFICULTY IS 1..3 AND IS DRAWN AS TILES; the score is 1..3 and is drawn as STARS. They are
+ * deliberately different symbols, because one symbol meaning two things is how a player ends up
+ * reading their score as the level's difficulty.
+ */
+const HARD = [1, 1, 2, 2, 3, 3]
+
+function paintDifficulty(i) {
+    const box = $('diff')
+
+    box.dataset.d = String(HARD[i])
+    box.textContent = ''
+
+    for (let k = 0; k < HARD[i]; k++) box.appendChild(document.createElement('i'))
+
+    $('difflbl').textContent = NAMES[i]
+}
+
+/**
+ * THE MOVE BUDGET IS THE LOSS CONDITION.
+ *
+ * Par moves are free. Every move after par spends one of `spare`. At zero spare and unsolved, the
+ * board is lost. spare = max(4, par) -- roughly double the minimum -- which is loose enough to
+ * experiment and tight enough to mean something.
+ */
+const spareFor = (lv) => Math.max(4, lv.par)
+const spentOver = () => Math.max(0, moved - level.par)
+const spareLeft = () => spareFor(level) - spentOver()
+
+let started = 0
+let ticker = null
+let ended = false
+let usedHint = false
+
+const pad = (n) => String(n).padStart(2, '0')
+const clock = () => {
+    const s = started ? Math.floor((Date.now() - started) / 1000) : 0
+
+    return `${pad(Math.floor(s / 60))}:${pad(s % 60)}`
+}
+
+function paintStatus() {
+    /* the score you would take if you solved it right now */
+    const got = starsEarned()
+
+    $('scoreStars').innerHTML = '★'.repeat(got) + '<span>' + '★'.repeat(3 - got) + '</span>'
+
+    $('moved').textContent = String(moved)
+    $('par').textContent = String(level.par)
+    $('undo').disabled = undoStack.length === 0 || ended
+
+    const spare = spareFor(level)
+    const left = spareLeft()
+    const hearts = $('hearts')
+
+    hearts.textContent = ''
+
+    for (let i = 0; i < spare; i++) {
+        const h = document.createElement('i')
+
+        h.className = 'heart' + (i < left ? '' : ' gone')
+        hearts.appendChild(h)
+    }
+
+    hearts.classList.toggle('low', left <= 1)
+}
+
+function tick() { $('clock').textContent = clock() }
+
+function startClock() {
+    if (started) return
+
+    started = Date.now()
+    ticker = setInterval(tick, 1000)
+}
+
+function stopClock() { clearInterval(ticker); ticker = null }
+
+/* ── end screens ──────────────────────────────────────────────────────────── */
+
+/**
+ * THREE THINGS CAN COST A STAR, and the end screen lists whichever applied rather than just
+ * showing a number -- a score you cannot account for is a score you argue with.
+ */
+function starsEarned() {
+    const spare = spareFor(level)
+    let n = 3
+
+    if (moved > level.par) n = moved <= level.par + Math.ceil(spare / 2) ? 2 : 1
+    if (usedHint) n -= 1
+
+    return Math.max(0, n)
+}
+
+function deductions() {
+    const spare = spareFor(level)
+    const out = []
+
+    if (moved > level.par && moved <= level.par + Math.ceil(spare / 2)) {
+        out.push(`−1 gwiazdka za ${moved - level.par} ${moved - level.par === 1 ? 'ruch' : 'ruchy'} ponad normę`)
+    } else if (moved > level.par) {
+        out.push(`−2 gwiazdki za ${moved - level.par} ruchów ponad normę`)
+    }
+
+    if (usedHint) out.push('−1 gwiazdka za podpowiedź')
+
+    return out
+}
+
+function onWin() {
+    if (ended) return
+
+    ended = true
+    stopClock()
+
+    const got = starsEarned()
+    const prev = best[level.id]
+
+    if (!prev || moved < prev.moves) { best[level.id] = { moves: moved, stars: got }; saveBest() }
+
+    $('end').dataset.kind = 'win'
+    $('endTitle').textContent = got === 3 ? 'Idealnie' : got === 0 ? 'Ledwo, ledwo' : 'Rozwiązane'
+    $('endStars').innerHTML = '★'.repeat(got) + '<span>' + '★'.repeat(3 - got) + '</span>'
+    $('endLine').innerHTML =
+        `<b>${moved}</b> ruchów · norma <b>${level.par}</b> · czas <b>${clock()}</b>`
+    const why = deductions()
+
+    $('endNote').innerHTML = why.length
+        ? why.join('<br>')
+        : 'Rozwiązane w minimalnej liczbie ruchów, bez podpowiedzi.'
+
+    $('endAgain').textContent = 'Jeszcze raz'
+    $('endNext').hidden = idx >= LEVELS.length - 1
+    $('endSolution').hidden = true
+    show('end')
+}
+
+function onLose() {
+    if (ended) return
+
+    ended = true
+    stopClock()
+
+    $('end').dataset.kind = 'lose'
+    $('endTitle').textContent = 'Koniec ruchów'
+    $('endStars').innerHTML = '<span>★★★</span>'
+    $('endLine').innerHTML = `Limit to <b>${level.par + spareFor(level)}</b> ruchów · norma <b>${level.par}</b>`
+    $('endNote').textContent = 'Tę planszę dało się ułożyć w ' + level.par + ' ruchach.'
+    $('endAgain').textContent = 'Spróbuj jeszcze raz'
+    $('endNext').hidden = true
+    $('endSolution').hidden = false
+    show('end')
+}
+
+/** Kept, and permanently false today — see the note in check(). */
+function onDead() {
+    paintStatus()
+}
+
+function spendCheck() {
+    paintStatus()
+
+    if (!ended && spareLeft() <= 0) onLose()
+}
+
+/**
+ * THE SOLUTION IS SHOWN ONLY AFTER A LOSS, and it is re-solved from the ORIGINAL board rather than
+ * the position the player got stuck in — which is the board they were actually asked to solve.
+ */
+function showSolution() {
+    const fresh = levelState(level)
+    const sol = solveAll(allTiles(fresh))
+
+    if (!sol) return
+
+    const box = $('solBox')
+
+    box.textContent = ''
+
+    sol.forEach((set) => {
+        const row = document.createElement('div')
+
+        row.className = 'solrow'
+        set.forEach((id) => row.appendChild(tileEl(id)))
+        box.appendChild(row)
+    })
+
+    show('sol')
+}
+
+/* ── screens ──────────────────────────────────────────────────────────────── */
+
+function show(name) {
+    for (const s of document.querySelectorAll('.screen')) s.hidden = s.id !== name
+    document.body.dataset.screen = name
+}
+
+/* ── level list ───────────────────────────────────────────────────────────── */
+
+let idx = 0
+let best = {}
+
+try { best = JSON.parse(localStorage.getItem('roszada:best') || '{}') } catch (e) { best = {} }
+
+const saveBest = () => { try { localStorage.setItem('roszada:best', JSON.stringify(best)) } catch (e) {} }
+
+function onLevelLoaded(i) {
+    idx = i
+    ended = false
+    usedHint = false
+    started = 0
+    stopClock()
+
+    $('clock').textContent = '00:00'
+    $('name').textContent = NAMES[i]
+    paintDifficulty(i)
+    $('count').textContent = `${i + 1} / ${LEVELS.length}`
+    $('freeing').textContent = level.freeing > 0
+        ? 'Coś na stole trzeba rozłożyć'
+        : 'Wszystkie płytki z ręki mają gdzie trafić'
+
+    paintStatus()
+}
+
+function renderList() {
+    const g = $('listGrid')
+
+    g.textContent = ''
+
+    LEVELS.forEach((lv, i) => {
+        const b = document.createElement('button')
+        const r = best[lv.id]
+
+        b.className = 'lvcard'
+        b.dataset.go = String(i)
+        const pips = '<i></i>'.repeat(HARD[i])
+
+        b.innerHTML =
+            `<span class="lvnum">${i + 1}</span>`
+            + `<span class="lvname">${NAMES[i]}</span>`
+            + `<span class="lvstars">${r ? '★'.repeat(r.stars) + `<span>${'★'.repeat(3 - r.stars)}</span>` : ''}</span>`
+            + `<span class="lvres"><span class="diff" data-d="${HARD[i]}">${pips}</span>`
+            + `${r ? `${r.moves} ruchów · norma ${lv.par}` : `norma ${lv.par}`}</span>`
+
+        if (r) b.dataset.done = ''
+        g.appendChild(b)
+    })
+}
+
+/* ── wiring ───────────────────────────────────────────────────────────────── */
+
+$('hint').addEventListener('click', () => {
+    if (ended) return
+
+    usedHint = true
+    hint()
+    paintStatus()
+})
+$('undo').addEventListener('click', () => {
+    if (!undoStack.length || ended) return
+
+    const prev = undoStack.pop()
+
+    state = prev.state
+    moved = prev.moved
+    held = []
+    hintIds = []
+    render()
+})
+$('reset').addEventListener('click', () => load(idx))
+$('back').addEventListener('click', () => { stopClock(); renderList(); show('list') })
+$('help').addEventListener('click', () => show('rules'))
+$('rulesOk').addEventListener('click', () => show(document.body.dataset.came || 'home'))
+$('listGrid').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-go]')
+
+    if (!b) return
+
+    load(Number(b.dataset.go))
+    show('play')
+})
+$('endAgain').addEventListener('click', () => { load(idx); show('play') })
+$('endNext').addEventListener('click', () => { load(Math.min(idx + 1, LEVELS.length - 1)); show('play') })
+$('endMenu').addEventListener('click', () => { renderList(); show('list') })
+$('endSolution').addEventListener('click', showSolution)
+$('solBack').addEventListener('click', () => show('end'))
+$('listRules').addEventListener('click', () => { document.body.dataset.came = 'list'; show('rules') })
+$('homePlay').addEventListener('click', () => {
+    const next = LEVELS.findIndex((lv) => !best[lv.id])
+
+    load(next === -1 ? 0 : next)
+    show('play')
+})
+$('homeLevels').addEventListener('click', () => { renderList(); show('list') })
+$('homeRules').addEventListener('click', () => { document.body.dataset.came = 'home'; show('rules') })
+$('listBack').addEventListener('click', () => show('home'))
+
+/* every wordmark, on every screen, goes home */
+document.querySelectorAll('[data-home]').forEach((el) => {
+    el.addEventListener('click', () => { stopClock(); show('home') })
+})
+
+load(0)
+renderList()
+show('home')
+
+
+
+/*
+ * THE DEMONSTRATION on the rules screen is the spec's canonical example, animated: a run of seven
+ * gives up its middle tile, splits into two runs that are both still legal, and the freed tile
+ * becomes a group with the two in hand. It is built from the same tileEl() as the board, so it can
+ * never drift from what the tiles actually look like.
+ */
+;(function demo() {
+    const box = $('demo')
+
+    if (!box) return
+
+    const W = 29
+    const X0 = 19
+    const run = ['B3#1', 'B4#1', 'B5#1', 'B6#1', 'B7#1', 'B8#1', 'B9#1']
+    const hand = ['R6#1', 'A6#1']
+
+    run.forEach((id, i) => {
+        const el = tileEl(id)
+
+        el.style.left = `${X0 + i * W}px`
+        el.style.top = '24px'
+        el.style.animationName = i < 3 ? 'slideL' : i === 3 ? 'pullOut' : 'slideR'
+        box.appendChild(el)
+    })
+
+    hand.forEach((id, i) => {
+        const el = tileEl(id)
+
+        el.style.left = `${X0 + i * W}px`
+        el.style.top = '88px'
+        el.style.animationName = i === 0 ? 'joinL' : 'joinR'
+        box.appendChild(el)
+    })
+
+    const cap = document.createElement('div')
+
+    cap.className = 'cap2'
+    cap.textContent = 'seria oddaje szóstkę · zostają dwie poprawne serie · powstaje grupa szóstek'
+    box.appendChild(cap)
+})()
+
+/* the two example rows on the rules screen, built from the same tileEl as the board */
+;(function examples() {
+    const run = ['B5#1', 'B6#1', 'B7#1']
+    const grp = ['R9#1', 'B9#1', 'G9#1']
+
+    run.forEach((id) => $('exRun').appendChild(tileEl(id)))
+    grp.forEach((id) => $('exGroup').appendChild(tileEl(id)))
+})()
+
+</script>
+</body>
+</html>
