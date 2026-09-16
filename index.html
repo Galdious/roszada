@@ -1948,6 +1948,13 @@ function onDown(e) {
        before the end screen the board must already be untouchable. */
     if (solved || ended) return
 
+    /*
+     * ONE POINTER AT A TIME. While a finger is pressing or dragging, a second finger is ignored
+     * outright -- no tap, no drop, no new press -- so it can neither steal the drag nor place the
+     * selection out from under the first. The first finger's own up or cancel is what frees it.
+     */
+    if (press) return
+
     const tile = e.target.closest('[data-tile]')
     const drop = e.target.closest('[data-drop]')
 
@@ -1967,14 +1974,15 @@ function onDown(e) {
 
     e.preventDefault()
 
-    press = { id: tile.dataset.tile, x: e.clientX, y: e.clientY, dragging: false, el: tile }
+    press = { id: tile.dataset.tile, x: e.clientX, y: e.clientY, dragging: false, el: tile, pointerId: e.pointerId }
 
     /* Keeps the drag alive when the pointer leaves the tile it started on. */
     tile.setPointerCapture?.(e.pointerId)
 }
 
 function onMove(e) {
-    if (!press) return
+    /* only the pointer that started the press may move it */
+    if (!press || e.pointerId !== press.pointerId) return
 
     if (!press.dragging) {
         if (Math.hypot(e.clientX - press.x, e.clientY - press.y) < DRAG_PX) return
@@ -1993,7 +2001,7 @@ function onMove(e) {
 }
 
 function onUp(e) {
-    if (!press) return
+    if (!press || e.pointerId !== press.pointerId) return
 
     const wasDragging = press.dragging
     const id = press.id
@@ -2025,8 +2033,8 @@ function onUp(e) {
  * picked up and a tap finishes the move. Dropping the move instead would lose a tile out from
  * under somebody, which is the worse failure by a distance.
  */
-function onCancel() {
-    if (!press) return
+function onCancel(e) {
+    if (!press || e.pointerId !== press.pointerId) return
 
     press = null
     clearGhost()
