@@ -46,6 +46,13 @@
  */
 html{background:#FFFFFF!important}
 html,:root{color-scheme:only light}
+/*
+ * THE BROWSER'S OWN GESTURES ARE OFF. Double-tap zoom, pinch zoom, the long-press callout and
+ * text inflation all fire mid-play and read as the game breaking. `user-scalable=no` is not
+ * enough: iOS Safari has ignored it since iOS 10. So this is done at every level that works --
+ * touch-action here and on the table, and gesture/touch/dblclick listeners in the wiring.
+ */
+html,body{-webkit-text-size-adjust:100%;text-size-adjust:100%;-webkit-touch-callout:none}
 body{background:#FFFFFF!important}
 
 /* The backdrop is an ELEMENT, not a property, because a property is overridable and an
@@ -62,6 +69,8 @@ body{background:#FFFFFF!important}
   }
 }
 body{
+  /* manipulation = pan and pinch allowed, double-tap zoom gone. Pinch is then stopped in JS. */
+  touch-action:manipulation;
   background:var(--paper);color:var(--ink);
   font-family:'Inter',system-ui,-apple-system,sans-serif;
   -webkit-font-smoothing:antialiased;
@@ -133,6 +142,8 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 main{
   flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
   -webkit-overflow-scrolling:touch;
+  /* the table scrolls vertically and does nothing else; tiles inside keep touch-action:none */
+  touch-action:pan-y;
   /* the fade is the scroll affordance; a bar down the side of the table is not part of the design */
   scrollbar-width:none;
   padding:14px 12px 10px;
@@ -497,7 +508,7 @@ body.losing .hearts .heart{animation:dotsOut .5s ease both}
 
     <div class="status">
       <div class="scorestars" id="scoreStars"></div>
-      <div class="metrics">ruchy <b id="moved">0</b> · norma <b id="par"></b></div>
+      <div class="metrics"><b id="moved">0</b> <span id="movedWord">kafelków</span> · norma <b id="par"></b></div>
       <div class="clock" id="clock">00:00</div>
     </div>
     <div class="hearts" id="hearts" style="justify-content:center;padding:6px 0 2px"></div>
@@ -539,8 +550,8 @@ body.losing .hearts .heart{animation:dotsOut .5s ease both}
       <div class="demo" id="demo"></div>
     </div>
 
-    <p class="fine"><b>Norma</b> to najmniejsza możliwa liczba ruchów; ruchy ponad normę zabierają
-      gwiazdki i zużywają zapas z kropek, a podpowiedź kosztuje gwiazdkę.</p>
+    <p class="fine"><b>Norma</b> to najmniejsza liczba kafelków do przełożenia; kafelki ponad normę
+      zabierają gwiazdki i zużywają zapas z kropek, a podpowiedź kosztuje gwiazdkę.</p>
     <p class="fine">Dotknij płytkę, potem miejsca docelowego — albo po prostu przeciągnij.</p>
 
     <button class="btn go" id="rulesOk" style="width:100%">Rozumiem</button>
@@ -987,12 +998,20 @@ function place(state, ids, target) {
 
 /* =================================================================================================
    PART TWO — THE LEVELS
-   Six of the generated pool, chosen for a curve: two easy, two medium, two hard. `par` is the
-   PROVEN minimum tiles moved, confirmed by bounded search, not the number the generator used.
+   Five from the generated pool and one generated for this set (N1), laddered by size. `par` is
+   the PROVEN minimum tiles moved -- see roszadaCheck() -- not the number the generator used.
    `freeing` is how many table tiles must move before anything in hand fits — the axis that
    actually correlates with difficulty. `decoys` are valid sets the solution must NOT touch.
    ============================================================================================== */
 
+/*
+ * ORDERED BY SIZE, SMALLEST FIRST: 14, 17, 21, 22, 26, 29 tiles, so the first board fits a phone
+ * without scrolling. Par is NOT monotonic and is not meant to be -- board 4 is cheap to solve and
+ * still has six sets and a decoy to see through. Par is cost, not difficulty.
+ *
+ * Every par here is what roszadaCheck() replays through place(), and every one is PROVEN minimal
+ * there as well -- not just reachable. Run it after touching anything below.
+ */
 const LEVELS = [
   {
     "id": "T3-31220821",
@@ -1005,15 +1024,15 @@ const LEVELS = [
     "decoys": []
   },
   {
-    "id": "T4-23650257",
-    "tier": 4,
-    "par": 3,
-    "board": "R6,R7,R8 | R9,G9,B9 | G4,R4,B4 | A10,G10,R10 | A1,R1,G1,B1 | A9,R9,G9,B9",
-    "hand": "R10,A9",
+    "id": "N1-20490576",
+    "tier": 2,
+    "par": 5,
+    "board": "B7,B8,B9 | B11,B12,B13 | G3,B3,R3 | A10,G10,R10,B10",
+    "hand": "G7,R7,B10,A3",
     "freeing": 1,
     "setsDisturbed": 2,
     "decoys": [
-      { "tiles": "A9,R9,G9,B9", "kind": "colour-blocked-group" }
+      { "tiles": "A10,G10,R10,B10", "kind": "colour-blocked-group" }
     ]
   },
   {
@@ -1029,16 +1048,28 @@ const LEVELS = [
     ]
   },
   {
-    "id": "T5-23784880",
+    "id": "T4-23650257",
+    "tier": 4,
+    "par": 3,
+    "board": "R6,R7,R8 | R9,G9,B9 | G4,R4,B4 | A10,G10,R10 | A1,R1,G1,B1 | A9,R9,G9,B9",
+    "hand": "R10,A9",
+    "freeing": 1,
+    "setsDisturbed": 2,
+    "decoys": [
+      { "tiles": "A9,R9,G9,B9", "kind": "colour-blocked-group" }
+    ]
+  },
+  {
+    "id": "T5-28932230",
     "tier": 5,
-    "par": 6,
-    "board": "B2,B3,B4 | B5,B6,B7,B8,B9 | A12,B12,R12 | G6,G7,G8,G9,G10,G11 | G12,A12,R12 | G2,R2,A2 | A3,A4,A5",
-    "hand": "R2,G2,G5,B12",
+    "par": 4,
+    "board": "A4,A5,A6 | R11,A11,B11 | G4,R4,B4,A4 | G9,B9,A9 | B5,A5,R5 | A7,R7,B7,G7 | B3,B4,B5,B6",
+    "hand": "G4,A7",
     "freeing": 2,
     "setsDisturbed": 2,
     "decoys": [
-      { "tiles": "G2,R2,A2", "kind": "colour-blocked-group" },
-      { "tiles": "A3,A4,A5", "kind": "run-looks-extendable" }
+      { "tiles": "A7,R7,B7,G7", "kind": "colour-blocked-group" },
+      { "tiles": "B3,B4,B5,B6", "kind": "run-looks-extendable" }
     ]
   },
   {
@@ -1052,26 +1083,6 @@ const LEVELS = [
     "decoys": [
       { "tiles": "A5,G5,R5,B5", "kind": "colour-blocked-group" },
       { "tiles": "G9,G10,G11", "kind": "run-looks-extendable" }
-    ]
-  },
-  {
-    /*
-     * PAR IS 4 HERE, NOT THE 5 THIS BOARD ARRIVED WITH, and roszadaCheck() is what says so.
-     * The cheapest line is: A7 from the hand extends A4,A5,A6; A4 then leaves that run to start
-     * a new group of fours with R4 out of G4,R4,B4,A4 and the G4 in hand. Two tiles from the
-     * hand, two off the table. Replayed move by move through place() it reaches isSolved with
-     * moved === 4, so 5 would have handed out a free star.
-     */
-    "id": "T5-28932230",
-    "tier": 5,
-    "par": 4,
-    "board": "A4,A5,A6 | R11,A11,B11 | G4,R4,B4,A4 | G9,B9,A9 | B5,A5,R5 | A7,R7,B7,G7 | B3,B4,B5,B6",
-    "hand": "G4,A7",
-    "freeing": 2,
-    "setsDisturbed": 2,
-    "decoys": [
-      { "tiles": "A7,R7,B7,G7", "kind": "colour-blocked-group" },
-      { "tiles": "B3,B4,B5,B6", "kind": "run-looks-extendable" }
     ]
   }
 ]
@@ -1631,18 +1642,167 @@ function replayPlan(st0, part, anchorOf) {
 }
 
 /**
- * THE SELF-CHECK. For every level: it can be solved; the stated par is the true minimum; and the
- * cheapest solution takes at least one tile OFF THE TABLE rather than only dealing out the hand.
+ * WHAT A SET BREAKS INTO WHEN THESE TILES LEAVE IT, under rules every real game obeys.
  *
- * That last one is the point of this board set. `freeing` and `setsDisturbed` describe the path
- * the generator took to build a board, not the path a player finds, so they cannot answer it --
- * only minimising over every arrangement can.
+ * A group never splits. A run can only come apart where a removed tile sat: two tiles that
+ * stay, with nothing removed between them, are consecutive numbers and share a container
+ * forever. This is deliberately LOOSER than the engine -- splitRun also demands both halves be
+ * valid at that moment, and this ignores that -- which is what makes the answer a lower bound.
+ */
+function piecesAfter(set, removed) {
+    const kept = set.filter((id) => !removed.has(id))
+
+    if (!kept.length) return []
+    if (!set.every((id) => col(id) === col(set[0]))) return [kept]
+
+    const out = []
+    let cur = []
+
+    for (const id of [...set].sort((a, b) => num(a) - num(b))) {
+        if (removed.has(id)) {
+            if (cur.length) out.push(cur)
+            cur = []
+        } else {
+            cur.push(id)
+        }
+    }
+
+    if (cur.length) out.push(cur)
+
+    return out
+}
+
+/** Can every piece sit whole inside one planned set, respecting how many of each face it holds? */
+function piecesFit(pieces, part) {
+    const room = part.map(faceBag)
+    const bags = pieces.map(faceBag).sort((a, b) => b.size - a.size)
+
+    return (function go(i) {
+        if (i === bags.length) return true
+
+        for (const r of room) {
+            let fits = true
+
+            for (const [v, n] of bags[i]) if ((r.get(v) ?? 0) < n) { fits = false; break }
+
+            if (!fits) continue
+
+            for (const [v, n] of bags[i]) r.set(v, r.get(v) - n)
+            if (go(i + 1)) return true
+            for (const [v, n] of bags[i]) r.set(v, r.get(v) + n)
+        }
+
+        return false
+    })(0)
+}
+
+function* chooseK(arr, k, from = 0, acc = []) {
+    if (acc.length === k) {
+        yield acc
+
+        return
+    }
+
+    for (let i = from; i < arr.length; i++) yield* chooseK(arr, k, i + 1, [...acc, arr[i]])
+}
+
+/** Every set of `k` table tiles whose removal leaves pieces that fit some valid arrangement. */
+function removalsThatFit(st, partitions, k) {
+    const out = []
+
+    for (const rem of chooseK(st.sets.flat(), k)) {
+        const removed = new Set(rem)
+        const pieces = st.sets.flatMap((x) => piecesAfter(x, removed))
+
+        if (partitions.some((part) => piecesFit(pieces, part))) out.push(rem)
+    }
+
+    return out
+}
+
+/**
+ * EXHAUSTIVE: can the board be solved in exactly `depth` single-tile moves if ONLY these tiles
+ * ever move? Real place(), real splitRun, every order, every target. Positions that differ only
+ * in which copy of a repeated face sits where are the same position and are searched once.
+ *
+ * Two prunings, both exact. With no moves to spare beyond the hand, only hand tiles may move.
+ * And with `onceEach`, a tile that has moved does not move again -- the caller sets it only when
+ * every mover is forced to move, so a second move of any of them would put the line over budget.
+ */
+function solvableMovingOnly(st0, movers, depth, deadline, onceEach = false) {
+    const seen = new Map()
+    let timedOut = false
+    let nodes = 0
+
+    const key = (st, pool) => st.sets.map((x) => x.map(value).sort().join(',')).sort().join('|')
+        + '/' + st.hand.map(value).sort().join(',') + '/' + [...pool].map(value).sort().join(',')
+
+    const found = (function go(st, left, pool) {
+        if (isSolved(st)) return true
+        if (left === 0 || st.hand.length > left) return false
+
+        if (++nodes % 2000 === 0 && Date.now() > deadline) {
+            timedOut = true
+
+            return false
+        }
+
+        const k = key(st, onceEach ? pool : [])
+
+        if ((seen.get(k) ?? -1) >= left) return false
+
+        seen.set(k, left)
+
+        const handOnly = left === st.hand.length
+
+        for (const id of [...st.hand, ...st.sets.flat()]) {
+            if (!pool.has(id)) continue
+            if (handOnly && !st.hand.includes(id)) continue
+
+            const rest = onceEach ? new Set([...pool].filter((x) => x !== id)) : pool
+
+            const targets = st.sets.map((x, si) => ({ where: 'set', si, idx: x.length }))
+
+            targets.push({ where: 'new' })
+
+            for (const t of targets) {
+                const next = place(st, [id], t)
+
+                if (next && go(next, left - 1, rest)) return true
+                if (timedOut) return false
+            }
+        }
+
+        return false
+    })(st0, depth, new Set(movers))
+
+    return { found, timedOut }
+}
+
+/**
+ * THE SELF-CHECK. For every level: it can be solved; the stated par is reachable AND nothing
+ * cheaper exists; and the cheapest solution takes at least one tile OFF THE TABLE rather than
+ * only dealing out the hand.
+ *
+ * Reachable is the replay: the cheapest plan the cost model finds, played through place().
+ * Minimal is harder, because the cost model matches containers one-to-one and does not see
+ * auto-split, so it can in principle overstate a board. Two steps close that:
+ *
+ *   1. A LOWER BOUND from piecesAfter -- the fewest table tiles that could possibly leave their
+ *      sets, under rules looser than the engine's. If hand + that equals the replay, done.
+ *   2. If there is a gap, SEARCH it: any cheaper solution must move exactly the hand plus a set
+ *      of table tiles that passes the bound, so each such set is searched exhaustively through
+ *      place(). None solving means the replay is the minimum.
+ *
+ * `freeing` and `setsDisturbed` describe the path the generator took, not the path a player
+ * finds, so none of this trusts them.
  */
 function roszadaCheck() {
     const rows = []
     let pass = true
 
     for (const lv of LEVELS) {
+        const t0 = Date.now()
         const st = levelState(lv)
         const tiles = allTiles(st)
         const solvable = solveAll(tiles) !== null
@@ -1657,28 +1817,66 @@ function roszadaCheck() {
         }
 
         const replay = best ? replayPlan(st, best.part, best.anchorOf) : { ok: false, why: 'no plan' }
-        const tableMoves = best ? best.cost - st.hand.length : 0
-        const row = {
-            id: lv.id,
-            tiles: tiles.length,
-            hand: st.hand.length,
-            arrangements: partitions.length + (capped ? '+ (capped)' : ''),
-            par: lv.par,
-            minimum: best ? best.cost : '—',
-            'from hand': st.hand.length,
-            'off table': tableMoves,
-            replay: replay.ok ? 'solved in ' + replay.moved : 'FAILED: ' + (replay.why ?? '?'),
-            ok: solvable && !capped && best?.cost === lv.par && tableMoves >= 1 && replay.ok && replay.moved === lv.par,
+        const reached = replay.ok ? replay.moved : null
+
+        /* step 1: the bound */
+        let tableBound = null
+
+        for (let k = 0; reached !== null && k <= reached - st.hand.length; k++) {
+            if (removalsThatFit(st, partitions, k).length) {
+                tableBound = k
+
+                break
+            }
         }
 
-        if (!row.ok) pass = false
+        const bound = tableBound === null ? null : st.hand.length + tableBound
 
-        rows.push(row)
+        /* step 2: search whatever the bound leaves open */
+        let minimal = reached !== null && bound === reached
+        let method = minimal ? 'bound' : ''
+        let cheaper = null
+
+        if (reached !== null && bound !== null && bound < reached) {
+            minimal = true
+            method = 'bound + search'
+
+            for (let depth = bound; depth < reached && minimal; depth++) {
+                for (let k = tableBound; k <= depth - st.hand.length && minimal; k++) {
+                    for (const rem of removalsThatFit(st, partitions, k)) {
+                        /* at the smallest removal that fits, every mover is forced to move once */
+                        const once = k === tableBound && depth === st.hand.length + k
+                        const r = solvableMovingOnly(st, [...st.hand, ...rem], depth, Date.now() + 300000, once)
+
+                        if (r.timedOut) { minimal = false; method = 'search timed out'; break }
+                        if (r.found) { minimal = false; cheaper = depth; method = 'CHEAPER LINE FOUND'; break }
+                    }
+                }
+            }
+        }
+
+        const tableMoves = reached !== null ? reached - st.hand.length : null
+        const ok = solvable && !capped && reached === lv.par && minimal && tableMoves >= 1
+
+        rows.push({
+            id: lv.id,
+            tiles: tiles.length,
+            par: lv.par,
+            replay: replay.ok ? 'solved in ' + replay.moved : 'FAILED: ' + (replay.why ?? '?'),
+            'lower bound': bound ?? '—',
+            minimal: minimal ? 'proven (' + method + ')' : cheaper !== null ? 'NO — solvable in ' + cheaper : method || 'unproven',
+            'from hand': st.hand.length,
+            'off table': tableMoves ?? '—',
+            ms: Date.now() - t0,
+            ok,
+        })
+
+        if (!ok) pass = false
     }
 
     console.table(rows)
     console.log(pass
-        ? 'PASS — every board solvable, every par minimal, every board needs the table taken apart.'
+        ? 'PASS — every board solvable, every par reached AND proven minimal, every board needs the table taken apart.'
         : 'FAIL — see the ok column.')
 
     return pass
@@ -1946,6 +2144,22 @@ document.addEventListener('pointermove', onMove)
 document.addEventListener('pointerup', onUp)
 document.addEventListener('pointercancel', onCancel)
 
+/*
+ * NO BROWSER ZOOM DURING PLAY. The gesture* events are iOS Safari's pinch; the two-finger
+ * touchstart catches pinch everywhere else; dblclick is the desktop-and-Android double-tap.
+ * The touchstart handler only acts on a SECOND finger, so a one-finger drag or scroll never
+ * reaches preventDefault -- and pointer events fire regardless of a cancelled touchstart.
+ */
+for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+    document.addEventListener(type, (e) => e.preventDefault(), { passive: false })
+}
+
+document.addEventListener('touchstart', (e) => {
+    if (e.touches.length > 1) e.preventDefault()
+}, { passive: false })
+
+document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false })
+
 
 /* =================================================================================================
    PART FOUR — THE SHELL
@@ -1990,6 +2204,23 @@ let ended = false
 let usedHint = false
 
 const pad = (n) => String(n).padStart(2, '0')
+
+/**
+ * THE COST IS TILES, NOT GESTURES, and the word says so: moving three at once costs three.
+ *
+ * Polish counts in three forms: 1 kafelek, 2-4 kafelki, 5+ kafelków -- except that 12-14 take
+ * the 5+ form, while 22-24, 32-34 and so on go back to "kafelki". Every number shown next to
+ * the word goes through here; nothing hard-codes a form.
+ */
+function kafelki(n) {
+    const tens = n % 100
+    const units = n % 10
+
+    if (n === 1) return 'kafelek'
+    if (units >= 2 && units <= 4 && (tens < 12 || tens > 14)) return 'kafelki'
+
+    return 'kafelków'
+}
 const clock = () => {
     const s = started ? Math.floor((Date.now() - started) / 1000) : 0
 
@@ -2003,6 +2234,7 @@ function paintStatus() {
     $('scoreStars').innerHTML = '★'.repeat(got) + '<span>' + '★'.repeat(3 - got) + '</span>'
 
     $('moved').textContent = String(moved)
+    $('movedWord').textContent = kafelki(moved)
     $('par').textContent = String(level.par)
     $('undo').disabled = undoStack.length === 0 || ended
 
@@ -2067,10 +2299,12 @@ function deductions() {
     const spare = spareFor(level)
     const out = []
 
+    const over = moved - level.par
+
     if (moved > level.par && moved <= level.par + Math.ceil(spare / 2)) {
-        out.push(`−1 gwiazdka za ${moved - level.par} ${moved - level.par === 1 ? 'ruch' : 'ruchy'} ponad normę`)
+        out.push(`−1 gwiazdka za ${over} ${kafelki(over)} ponad normę`)
     } else if (moved > level.par) {
-        out.push(`−2 gwiazdki za ${moved - level.par} ruchów ponad normę`)
+        out.push(`−2 gwiazdki za ${over} ${kafelki(over)} ponad normę`)
     }
 
     if (usedHint) out.push('−1 gwiazdka za podpowiedź')
@@ -2119,12 +2353,12 @@ function onWin() {
     $('endTitle').textContent = got === 3 ? 'Idealnie' : got === 0 ? 'Ledwo, ledwo' : 'Rozwiązane'
     $('endStars').innerHTML = '★'.repeat(got) + '<span>' + '★'.repeat(3 - got) + '</span>'
     $('endLine').innerHTML =
-        `<b>${moved}</b> ruchów · norma <b>${level.par}</b> · czas <b>${clock()}</b>`
+        `<b>${moved}</b> ${kafelki(moved)} · norma <b>${level.par}</b> · czas <b>${clock()}</b>`
     const why = deductions()
 
     $('endNote').innerHTML = why.length
         ? why.join('<br>')
-        : 'Rozwiązane w minimalnej liczbie ruchów, bez podpowiedzi.'
+        : 'Rozwiązane w normie, bez podpowiedzi.'
 
     $('endAgain').textContent = 'Jeszcze raz'
     $('endNext').hidden = idx >= LEVELS.length - 1
@@ -2141,10 +2375,12 @@ function onLose() {
     document.body.classList.add('losing')
 
     $('end').dataset.kind = 'lose'
-    $('endTitle').textContent = 'Koniec ruchów'
+    $('endTitle').textContent = 'Koniec zapasu'
     $('endStars').innerHTML = '<span>★★★</span>'
-    $('endLine').innerHTML = `Limit to <b>${level.par + spareFor(level)}</b> ruchów · norma <b>${level.par}</b>`
-    $('endNote').textContent = 'Tę planszę dało się ułożyć w ' + level.par + ' ruchach.'
+    const limit = level.par + spareFor(level)
+
+    $('endLine').innerHTML = `Limit to <b>${limit}</b> ${kafelki(limit)} · norma <b>${level.par}</b>`
+    $('endNote').textContent = `Tę planszę dało się ułożyć, przekładając ${level.par} ${kafelki(level.par)}.`
     $('endAgain').textContent = 'Spróbuj jeszcze raz'
     $('endNext').hidden = true
     $('endSolution').hidden = false
@@ -2241,7 +2477,7 @@ function renderList() {
             + `<span class="lvname">${NAMES[i]}</span>`
             + `<span class="lvstars">${r ? '★'.repeat(r.stars) + `<span>${'★'.repeat(3 - r.stars)}</span>` : ''}</span>`
             + `<span class="lvres"><span class="diff" data-d="${HARD[i]}">${pips}</span>`
-            + `${r ? `${r.moves} ruchów · norma ${lv.par}` : `norma ${lv.par}`}</span>`
+            + `${r ? `${r.moves} ${kafelki(r.moves)} · norma ${lv.par}` : `norma ${lv.par}`}</span>`
 
         if (r) b.dataset.done = ''
         g.appendChild(b)
