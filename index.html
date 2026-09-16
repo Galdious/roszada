@@ -109,7 +109,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 
 /* ── difficulty band ──────────────────────────────────────────────────────── */
 .band{
-  padding:13px 16px 14px;border-bottom:1px solid var(--line);
+  padding:8px 16px 9px;border-bottom:1px solid var(--line);
   display:flex;align-items:center;justify-content:space-between;gap:12px;
 }
 .band .who{display:flex;flex-direction:column;gap:3px;min-width:0}
@@ -495,7 +495,6 @@ body.losing .hearts .heart{animation:dotsOut .5s ease both}
 
   <div class="tablewrap">
     <main>
-      <div class="cap">Stół</div>
       <div id="table"></div>
       <div id="newset">nowy układ</div>
     </main>
@@ -1005,35 +1004,37 @@ function place(state, ids, target) {
    ============================================================================================== */
 
 /*
- * ORDERED BY SIZE, SMALLEST FIRST: 14, 17, 21, 22, 26, 29 tiles, so the first board fits a phone
- * without scrolling. Par is NOT monotonic and is not meant to be -- board 4 is cheap to solve and
- * still has six sets and a decoy to see through. Par is cost, not difficulty.
+ * ORDERED BY SIZE, SMALLEST FIRST: 7, 13, 21, 22, 26, 29 tiles. Par is NOT monotonic and is not
+ * meant to be -- board 4 is cheap to solve and still has six sets and a decoy to see through. Par
+ * is cost, not difficulty.
+ *
+ * THE FIRST TWO ARE BUILT BY HAND, because nothing in either generated pool has zero BYSTANDERS --
+ * table sets the solution never touches, which a beginner still has to look at and rule out. A
+ * tutorial wants none; see the bystanders column in roszadaCheck().
  *
  * Every par here is what roszadaCheck() replays through place(), and every one is PROVEN minimal
  * there as well -- not just reachable. Run it after touching anything below.
  */
 const LEVELS = [
   {
-    "id": "T3-31220821",
-    "tier": 3,
+    /* Cut the only run. The whole table is one set and it has to give up R1. */
+    "id": "H1-cut-the-run",
+    "tier": 1,
     "par": 3,
-    "board": "R1,R2,R3,R4,R5 | B4,R4,G4,A4 | A7,G7,R7",
+    "board": "R1,R2,R3,R4,R5",
     "hand": "B1,G1",
     "freeing": 1,
-    "setsDisturbed": 2,
     "decoys": []
   },
   {
-    "id": "N1-20490576",
+    /* The blocked group. R3 takes A3's place, A3 joins the run so A2 has a home, A9 finishes the 9s. */
+    "id": "H2-blocked-group",
     "tier": 2,
-    "par": 5,
-    "board": "B7,B8,B9 | B11,B12,B13 | G3,B3,R3 | A10,G10,R10,B10",
-    "hand": "G7,R7,B10,A3",
+    "par": 4,
+    "board": "A4,A5,A6,A7 | A3,B3,G3 | R9,B9,G9",
+    "hand": "A2,R3,A9",
     "freeing": 1,
-    "setsDisturbed": 2,
-    "decoys": [
-      { "tiles": "A10,G10,R10,B10", "kind": "colour-blocked-group" }
-    ]
+    "decoys": []
   },
   {
     "id": "T4-21670507",
@@ -1809,15 +1810,36 @@ function roszadaCheck() {
         const { partitions, capped } = allPartitions(tiles, 200000, Date.now() + 10000)
 
         let best = null
+        const costs = []
 
         for (const part of partitions) {
             const plan = planFor(part, st)
+
+            costs.push({ part, cost: plan.cost })
 
             if (!best || plan.cost < best.cost) best = { cost: plan.cost, anchorOf: plan.anchorOf, part }
         }
 
         const replay = best ? replayPlan(st, best.part, best.anchorOf) : { ok: false, why: 'no plan' }
         const reached = replay.ok ? replay.moved : null
+
+        /*
+         * BYSTANDERS: table sets that sit in the cheapest solution UNCHANGED, compared by face. The
+         * generator's `decoys` only counts sets it built on purpose; any set the solution never
+         * touches works as one, because a player still has to look at it and decide to leave it.
+         * A tutorial wants none. Counted over every cheapest solution; a range means it depends on
+         * which one you take.
+         */
+        const faceKey = (x) => x.map(value).sort().join(',')
+        const untouched = best
+            ? costs.filter((c) => c.cost === best.cost).map((c) => {
+                const keys = c.part.map(faceKey)
+
+                return st.sets.filter((x) => keys.includes(faceKey(x))).length
+            })
+            : []
+        const bLo = untouched.length ? Math.min(...untouched) : null
+        const bHi = untouched.length ? Math.max(...untouched) : null
 
         /* step 1: the bound */
         let tableBound = null
@@ -1867,6 +1889,7 @@ function roszadaCheck() {
             minimal: minimal ? 'proven (' + method + ')' : cheaper !== null ? 'NO — solvable in ' + cheaper : method || 'unproven',
             'from hand': st.hand.length,
             'off table': tableMoves ?? '—',
+            bystanders: bLo === null ? '—' : `${bLo === bHi ? bLo : bLo + '–' + bHi}/${st.sets.length}`,
             ms: Date.now() - t0,
             ok,
         })
@@ -2477,7 +2500,9 @@ function renderList() {
             + `<span class="lvname">${NAMES[i]}</span>`
             + `<span class="lvstars">${r ? '★'.repeat(r.stars) + `<span>${'★'.repeat(3 - r.stars)}</span>` : ''}</span>`
             + `<span class="lvres"><span class="diff" data-d="${HARD[i]}">${pips}</span>`
-            + `${r ? `${r.moves} ${kafelki(r.moves)} · norma ${lv.par}` : `norma ${lv.par}`}</span>`
+            /* NORMA ONLY ONCE PLAYED. Next to the difficulty pips it reads as a second difficulty
+               score, and par is cost, not difficulty; after a game it is context for your result. */
+            + `${r ? `${r.moves} ${kafelki(r.moves)} · norma ${lv.par}` : ''}</span>`
 
         if (r) b.dataset.done = ''
         g.appendChild(b)
