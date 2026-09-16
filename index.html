@@ -173,13 +173,14 @@ body.holding #newset{border-color:var(--accent);color:var(--accent);background:#
 /* THE DESTINATION BAR: always in the layout, only ever LIT. An element appearing would reflow the
    board, and a board that shifts under a decision is its own bug.
 
-   THE TOUCH AREA AND THE BAR ARE DIFFERENT SIZES, deliberately. The box is 22px so a finger can
-   hit it; the bar drawn inside it is the same 5px it always was. The negative side margins claw
-   back 6px of the box so a six-tile run still fits one line on a 375px phone -- the overlap falls
-   on the neighbouring tile's edge, which after the targetUnder fix resolves to the same insertion
-   point anyway, so the two hit areas agree where they meet. */
+   THE TOUCH AREA AND THE BAR ARE DIFFERENT SIZES, deliberately. The box is 30px -- a thumb, not
+   a stylus -- and the bar drawn inside it is the same 5px it always was. The negative side
+   margins claw back 6px of the box so a six-tile run still fits one line on a 375px phone: six
+   tiles at 44px, two boxes at 24px effective, 12px of padding and border, 324px of the 351px
+   available. The overlap falls on the neighbouring tile's edge, which after the targetUnder fix
+   resolves to the same insertion point anyway, so the two hit areas agree where they meet. */
 .drop{
-  flex:0 0 auto;width:22px;align-self:stretch;min-height:var(--tile-h);
+  flex:0 0 auto;width:30px;align-self:stretch;min-height:var(--tile-h);
   margin:0 -3px;position:relative;background:transparent;
 }
 .drop::after{
@@ -800,13 +801,21 @@ function solveAll(tiles) {
  * then compared against 1 to decide uniqueness: a silent clip that changes a verdict is the worst
  * kind of wrong. This returns { count, capped } so a caller can say "≥400" and mean it.
  */
-function allPartitions(tiles, cap = 400) {
+function allPartitions(tiles, cap = 400, deadline = Infinity) {
     const sorted = [...tiles].sort((a, b) => (ord(a) < ord(b) ? -1 : 1))
     const out = []
     let capped = false
 
     function go(rem, acc) {
         if (capped) return
+
+        /* `deadline` defaults to Infinity, so a two-argument call behaves exactly as before.
+           The hint passes a real one: a button press may not hang the board. */
+        if (Date.now() > deadline) {
+            capped = true
+
+            return
+        }
 
         if (!rem.length) {
             out.push(acc)
@@ -986,43 +995,6 @@ function place(state, ids, target) {
 
 const LEVELS = [
   {
-    "id": "T1-25558736",
-    "tier": 1,
-    "par": 3,
-    "board": "R5,R6,R7,R8,R9,R10 | A5,G5,B5 | B9,B10,B11 | R9,R10,R11",
-    "hand": "R12,R8,R5",
-    "freeing": 0,
-    "setsDisturbed": 0,
-    "decoys": [],
-    "breaksValidSet": true,
-    "solutions": 6,
-    "seed": 25558736
-  },
-  {
-    "id": "T2-25637926",
-    "tier": 2,
-    "par": 3,
-    "board": "A7,A8,A9,A10 | G7,R7,A7 | G9,R9,B9 | A11,B11,G11",
-    "hand": "A13,A12,A11",
-    "freeing": 0,
-    "setsDisturbed": 0,
-    "decoys": [
-      {
-        "tiles": "A11,B11,G11",
-        "kind": "colour-blocked-group",
-        "kinds": [
-          "colour-blocked-group",
-          "near-miss-pair",
-          "minimum-length-set",
-          "shared-value-trap"
-        ]
-      }
-    ],
-    "breaksValidSet": true,
-    "solutions": 8,
-    "seed": 25637926
-  },
-  {
     "id": "T3-31220821",
     "tier": 3,
     "par": 3,
@@ -1030,71 +1002,31 @@ const LEVELS = [
     "hand": "B1,G1",
     "freeing": 1,
     "setsDisturbed": 2,
-    "decoys": [],
-    "breaksValidSet": true,
-    "solutions": 1,
-    "seed": 31220821
+    "decoys": []
   },
   {
-    "id": "T3-25915091",
-    "tier": 3,
-    "par": 5,
-    "board": "R2,R3,R4 | A1,G1,B1 | G3,R3,B3 | R9,R10,R11,R12 | B2,R2,A2 | B10,B11,B12,B13",
-    "hand": "G12,R12,B12,R1",
-    "freeing": 1,
-    "setsDisturbed": 4,
-    "decoys": [
-      {
-        "tiles": "R9,R10,R11,R12",
-        "kind": "near-miss-pair",
-        "kinds": [
-          "near-miss-pair",
-          "shared-value-trap"
-        ]
-      },
-      {
-        "tiles": "B2,R2,A2",
-        "kind": "near-miss-pair",
-        "kinds": [
-          "near-miss-pair",
-          "minimum-length-set"
-        ]
-      },
-      {
-        "tiles": "B10,B11,B12,B13",
-        "kind": "near-miss-pair",
-        "kinds": [
-          "near-miss-pair",
-          "shared-value-trap"
-        ]
-      }
-    ],
-    "breaksValidSet": true,
-    "solutions": 2,
-    "seed": 25915091
-  },
-  {
-    "id": "T4-29193557",
+    "id": "T4-23650257",
     "tier": 4,
-    "par": 6,
-    "board": "R1,R2,R3,R4 | A5,R5,B5 | A12,B12,R12 | B4,B5,B6,B7",
-    "hand": "R6,R5,G3,A3,B3",
+    "par": 3,
+    "board": "R6,R7,R8 | R9,G9,B9 | G4,R4,B4 | A10,G10,R10 | A1,R1,G1,B1 | A9,R9,G9,B9",
+    "hand": "R10,A9",
     "freeing": 1,
-    "setsDisturbed": 1,
+    "setsDisturbed": 2,
     "decoys": [
-      {
-        "tiles": "B4,B5,B6,B7",
-        "kind": "run-looks-extendable",
-        "kinds": [
-          "run-looks-extendable",
-          "near-miss-pair",
-          "shared-value-trap"
-        ]
-      }
-    ],
-    "breaksValidSet": true,
-    "solutions": 2,
-    "seed": 29193557
+      { "tiles": "A9,R9,G9,B9", "kind": "colour-blocked-group" }
+    ]
+  },
+  {
+    "id": "T4-21670507",
+    "tier": 4,
+    "par": 5,
+    "board": "R2,R3,R4,R5 | R11,A11,B11,G11 | R9,B9,A9 | A7,B7,G7 | R1,G1,B1",
+    "hand": "A5,B5,R7,R1",
+    "freeing": 1,
+    "setsDisturbed": 2,
+    "decoys": [
+      { "tiles": "R1,G1,B1", "kind": "colour-blocked-group" }
+    ]
   },
   {
     "id": "T5-23784880",
@@ -1105,29 +1037,42 @@ const LEVELS = [
     "freeing": 2,
     "setsDisturbed": 2,
     "decoys": [
-      {
-        "tiles": "G2,R2,A2",
-        "kind": "colour-blocked-group",
-        "kinds": [
-          "colour-blocked-group",
-          "minimum-length-set",
-          "shared-value-trap"
-        ]
-      },
-      {
-        "tiles": "A3,A4,A5",
-        "kind": "run-looks-extendable",
-        "kinds": [
-          "run-looks-extendable",
-          "near-miss-pair",
-          "minimum-length-set",
-          "shared-value-trap"
-        ]
-      }
-    ],
-    "breaksValidSet": true,
-    "solutions": 30,
-    "seed": 23784880
+      { "tiles": "G2,R2,A2", "kind": "colour-blocked-group" },
+      { "tiles": "A3,A4,A5", "kind": "run-looks-extendable" }
+    ]
+  },
+  {
+    "id": "T5-24869783",
+    "tier": 5,
+    "par": 7,
+    "board": "A6,A7,A8,A9,A10,A11,A12,A13 | R9,A9,B9 | R2,G2,A2 | A3,B3,G3 | A5,G5,R5,B5 | G9,G10,G11",
+    "hand": "R12,B12,G13,R13,A5",
+    "freeing": 2,
+    "setsDisturbed": 1,
+    "decoys": [
+      { "tiles": "A5,G5,R5,B5", "kind": "colour-blocked-group" },
+      { "tiles": "G9,G10,G11", "kind": "run-looks-extendable" }
+    ]
+  },
+  {
+    /*
+     * PAR IS 4 HERE, NOT THE 5 THIS BOARD ARRIVED WITH, and roszadaCheck() is what says so.
+     * The cheapest line is: A7 from the hand extends A4,A5,A6; A4 then leaves that run to start
+     * a new group of fours with R4 out of G4,R4,B4,A4 and the G4 in hand. Two tiles from the
+     * hand, two off the table. Replayed move by move through place() it reaches isSolved with
+     * moved === 4, so 5 would have handed out a free star.
+     */
+    "id": "T5-28932230",
+    "tier": 5,
+    "par": 4,
+    "board": "A4,A5,A6 | R11,A11,B11 | G4,R4,B4,A4 | G9,B9,A9 | B5,A5,R5 | A7,R7,B7,G7 | B3,B4,B5,B6",
+    "hand": "G4,A7",
+    "freeing": 2,
+    "setsDisturbed": 2,
+    "decoys": [
+      { "tiles": "A7,R7,B7,G7", "kind": "colour-blocked-group" },
+      { "tiles": "B3,B4,B5,B6", "kind": "run-looks-extendable" }
+    ]
   }
 ]
 
@@ -1341,24 +1286,402 @@ function check() {
 /* ── the hint ─────────────────────────────────────────────────────────────── */
 
 /**
- * THE HINT WORKS FROM ANY BOARD STATE, and that is a genuinely good property of `solveAll` rather
+ * THE HINT WORKS FROM ANY BOARD STATE, and that is a genuinely good property of the solver rather
  * than a feature that had to be built.
  *
- * It is not a scripted "step 3 of the solution": it re-solves the CURRENT position from scratch,
+ * It is not a scripted "step 3 of the solution": it re-reads the CURRENT position from scratch,
  * so it stays correct after a pair have rearranged the table into something the level's author
  * never saw. A scripted hint would be wrong the moment anybody deviated, which is exactly when
  * somebody asks for one.
+ *
+ * WHAT IT NO LONGER DOES IS TAKE THE FIRST ANSWER. solveAll returns the first partition it finds,
+ * which is A solution and rarely the CHEAPEST one -- so following the hint spent stars. Measured
+ * from the opening position of the six boards here, the first answer costs 3, 2 and 1 moves more
+ * than the minimum on boards 4, 5 and 6 and ties on the first three. This weighs every arrangement
+ * against the board as it actually stands and takes the cheapest; it returns par on all six.
  */
+const HINT_CAP = 400
+const HINT_MS = 250
+
+/**
+ * TILES COUNTED BY FACE, NOT BY STAMP -- and this is the subtle half of the whole fix.
+ *
+ * Faces repeat: two R4s, two A9s. The stamps ('R4#1', 'R4#2') exist so the engine can tell two
+ * physical tiles apart, which it must. But the ENUMERATOR picks a copy arbitrarily -- it takes one
+ * instance per colour per value -- so a partition that is identical to the board in every way a
+ * player can see may nonetheless name R4#2 where R4#1 is sitting. Scored by stamp, that reads as
+ * two tiles needing to move. Scored by face, it correctly reads as nothing needing to move.
+ *
+ * Measured on board 1 (R1..R5 | B4,R4,G4,A4 | A7,G7,R7, hand B1,G1): by stamp the only partition
+ * costs 5, by face it costs 3, and 3 is what the engine actually takes to solve it. That gap of
+ * two identical tiles is exactly the expensive hint this replaces.
+ *
+ * Identity still decides WHICH tile lights up -- see canonicalise, which puts the copies already
+ * in place back where they belong before anything is highlighted.
+ */
+function faceBag(ids) {
+    const bag = new Map()
+
+    for (const id of ids) bag.set(value(id), (bag.get(value(id)) ?? 0) + 1)
+
+    return bag
+}
+
+/** How many tiles could stay put if this set on the table became that set in the plan. */
+function faceOverlap(a, b) {
+    let n = 0
+
+    for (const [v, c] of a) n += Math.min(c, b.get(v) ?? 0)
+
+    return n
+}
+
+/**
+ * WHAT THIS ARRANGEMENT WOULD COST FROM WHERE THE PLAYER IS STANDING.
+ *
+ * Every tile in hand has to be placed, so it costs one. A tile on the table costs one only if it
+ * has to leave the set it is in. Which sets get to stay is an assignment problem: each set on the
+ * table may anchor at most one set in the plan, and we want the assignment that keeps the most
+ * tiles where they are -- a set that is already correct then costs exactly nothing.
+ *
+ * Solved exactly by a DP over subsets of the planned sets, which is free at these sizes; past
+ * fourteen planned sets the table stops being cheap and a greedy read takes over.
+ */
+function planFor(part, st = state) {
+    const cur = st.sets.map(faceBag)
+    const tgt = part.map(faceBag)
+    const m = tgt.length
+    const total = allTiles(st).length
+
+    if (m > 14) {
+        const anchorOf = greedyAnchors(cur, tgt)
+        let stay = 0
+
+        anchorOf.forEach((si, j) => { if (si >= 0) stay += faceOverlap(cur[si], tgt[j]) })
+
+        return { cost: total - stay, anchorOf }
+    }
+
+    const size = 1 << m
+    let best = new Array(size).fill(-1)
+    const layers = []
+
+    best[0] = 0
+
+    for (let i = 0; i < cur.length; i++) {
+        const next = new Array(size).fill(-1)
+        const took = new Array(size).fill(-1)
+        const came = new Array(size).fill(-1)
+
+        for (let mask = 0; mask < size; mask++) {
+            if (best[mask] < 0) continue
+
+            if (next[mask] < best[mask]) {
+                next[mask] = best[mask]
+                took[mask] = -1
+                came[mask] = mask
+            }
+
+            for (let j = 0; j < m; j++) {
+                if (mask & (1 << j)) continue
+
+                const to = mask | (1 << j)
+                const v = best[mask] + faceOverlap(cur[i], tgt[j])
+
+                if (next[to] < v) {
+                    next[to] = v
+                    took[to] = j
+                    came[to] = mask
+                }
+            }
+        }
+
+        layers.push({ took, came })
+        best = next
+    }
+
+    let bi = 0
+
+    for (let mask = 1; mask < size; mask++) if (best[mask] > best[bi]) bi = mask
+
+    const anchorOf = new Array(m).fill(-1)
+    let mask = bi
+
+    for (let i = layers.length - 1; i >= 0; i--) {
+        const { took, came } = layers[i]
+
+        if (came[mask] < 0) break
+        if (took[mask] >= 0) anchorOf[took[mask]] = i
+
+        mask = came[mask]
+    }
+
+    return { cost: total - best[bi], anchorOf }
+}
+
+/** The same question answered by eye, for the rare position with too many sets to tabulate. */
+function greedyAnchors(cur, tgt) {
+    const anchorOf = new Array(tgt.length).fill(-1)
+    const pairs = []
+    const used = new Set()
+
+    cur.forEach((c, i) => tgt.forEach((t, j) => pairs.push({ i, j, w: faceOverlap(c, t) })))
+    pairs.sort((a, b) => b.w - a.w)
+
+    for (const pr of pairs) {
+        if (pr.w <= 0) break
+        if (used.has(pr.i) || anchorOf[pr.j] >= 0) continue
+
+        anchorOf[pr.j] = pr.i
+        used.add(pr.i)
+    }
+
+    return anchorOf
+}
+
+/**
+ * PUT THE PLAN BACK ON THE PHYSICAL TILES.
+ *
+ * Scoring ignores which copy of a repeated face the enumerator happened to name; highlighting
+ * cannot. Every planned set first claims the copies already sitting in the set it anchors, and
+ * only then takes whatever is left over -- so the hint lights up the tiles a player would touch,
+ * never the identical one across the table.
+ */
+function canonicalise(part, anchorOf, st = state) {
+    const pool = new Map()
+
+    for (const id of allTiles(st)) {
+        if (!pool.has(value(id))) pool.set(value(id), [])
+        pool.get(value(id)).push(id)
+    }
+
+    const out = part.map(() => [])
+
+    part.forEach((tj, j) => {
+        const si = anchorOf[j]
+
+        if (si < 0) return
+
+        const here = new Set(st.sets[si])
+
+        for (const id of tj) {
+            const list = pool.get(value(id)) ?? []
+            const at = list.findIndex((x) => here.has(x))
+
+            if (at >= 0) out[j].push(list.splice(at, 1)[0])
+        }
+    })
+
+    part.forEach((tj, j) => {
+        const need = faceBag(tj)
+
+        for (const id of out[j]) need.set(value(id), need.get(value(id)) - 1)
+
+        for (const [v, c] of need) {
+            for (let n = 0; n < c; n++) out[j].push(pool.get(v).pop())
+        }
+    })
+
+    return out.map(tidy)
+}
+
+const setKey = (ids) => [...ids].sort().join(',')
+
 function hint() {
+    const tiles = allTiles(state)
+    const { partitions, capped } = allPartitions(tiles, HINT_CAP, Date.now() + HINT_MS)
+
+    /* Too many arrangements to weigh, or too slow to finish weighing them: fall back to the
+       first answer the solver finds. Still a correct set, just not always the cheapest one. */
+    if (capped || !partitions.length) return hintFromSolver()
+
+    let best = null
+
+    for (const part of partitions) {
+        const plan = planFor(part)
+
+        if (!best || plan.cost < best.cost) best = { cost: plan.cost, anchorOf: plan.anchorOf, part }
+    }
+
+    if (!best) return hintFromSolver()
+
+    const already = new Set(state.sets.filter(validSet).map(setKey))
+    const wanted = canonicalise(best.part, best.anchorOf).find((s) => !already.has(setKey(s)))
+
+    hintIds = wanted ?? []
+    render()
+}
+
+/** The old behaviour, kept as the fallback it now is. */
+function hintFromSolver() {
     const solution = solveAll(allTiles(state))
 
     if (!solution) return
 
-    const already = new Set(state.sets.filter(validSet).map((s) => [...s].sort().join(',')))
-    const wanted = solution.find((s) => !already.has([...s].sort().join(',')))
+    const already = new Set(state.sets.filter(validSet).map(setKey))
+    const wanted = solution.find((s) => !already.has(setKey(s)))
 
     hintIds = wanted ?? []
     render()
+}
+
+/* =================================================================================================
+   THE LEVEL SELF-CHECK
+   Run `roszadaCheck()` in the console. Re-run it whenever a board or a par changes.
+   ============================================================================================== */
+
+/**
+ * WHICH TILES MOVE, AND WHERE THEY GO, to turn this position into that arrangement.
+ *
+ * Tiles a set gets to keep are the ones its anchor already holds, counted by face; everything
+ * else floats, along with the whole hand, and drops into the first planned set still short of
+ * that face. Returns null when no such filling exists, which would mean the plan was not a
+ * partition of the tiles in play.
+ */
+function movePlan(part, anchorOf, st) {
+    const kept = st.sets.map(() => [])
+    const movers = []
+
+    st.sets.forEach((si, i) => {
+        const j = anchorOf.indexOf(i)
+        const budget = j >= 0 ? faceBag(part[j]) : new Map()
+
+        for (const id of si) {
+            if ((budget.get(value(id)) ?? 0) > 0) {
+                budget.set(value(id), budget.get(value(id)) - 1)
+                kept[i].push(id)
+            } else {
+                movers.push(id)
+            }
+        }
+    })
+
+    movers.push(...st.hand)
+
+    const need = part.map((tj, j) => {
+        const b = faceBag(tj)
+        const si = anchorOf[j]
+
+        if (si >= 0) for (const id of kept[si]) b.set(value(id), b.get(value(id)) - 1)
+
+        return b
+    })
+
+    const moves = []
+
+    for (const id of movers) {
+        const j = need.findIndex((b) => (b.get(value(id)) ?? 0) > 0)
+
+        if (j < 0) return null
+
+        need[j].set(value(id), need[j].get(value(id)) - 1)
+        moves.push({ id, target: j })
+    }
+
+    /* fill the sets that already exist before starting new ones, so 'new' really means new */
+    moves.sort((a, b) => (anchorOf[a.target] < 0 ? 1 : 0) - (anchorOf[b.target] < 0 ? 1 : 0))
+
+    return { moves, kept }
+}
+
+/**
+ * PLAY THE PLAN THROUGH THE REAL ENGINE.
+ *
+ * A cost model that says a board takes four moves is an argument; place() reaching isSolved after
+ * four moves is a proof. This runs the move list through the same function the board runs, splits
+ * and tidying and all, and reports what actually happened.
+ */
+function replayPlan(st0, part, anchorOf) {
+    const plan = movePlan(part, anchorOf, st0)
+
+    if (!plan) return { ok: false, why: 'no filling' }
+
+    let st = { sets: st0.sets.map((x) => [...x]), hand: [...st0.hand] }
+    let moved = 0
+    const container = new Map()
+
+    part.forEach((tj, j) => {
+        const si = anchorOf[j]
+
+        if (si >= 0 && plan.kept[si].length) container.set(j, plan.kept[si][0])
+    })
+
+    for (const mv of plan.moves) {
+        let target = { where: 'new' }
+
+        if (container.has(mv.target)) {
+            const si = st.sets.findIndex((x) => x.includes(container.get(mv.target)))
+
+            if (si < 0) return { ok: false, why: 'lost a set mid-plan' }
+
+            target = { where: 'set', si, idx: st.sets[si].length }
+        }
+
+        const next = place(st, [mv.id], target)
+
+        if (!next) return { ok: false, why: 'place() refused ' + mv.id }
+
+        st = next
+        moved += 1
+
+        if (!container.has(mv.target)) container.set(mv.target, mv.id)
+    }
+
+    return { ok: isSolved(st), moved }
+}
+
+/**
+ * THE SELF-CHECK. For every level: it can be solved; the stated par is the true minimum; and the
+ * cheapest solution takes at least one tile OFF THE TABLE rather than only dealing out the hand.
+ *
+ * That last one is the point of this board set. `freeing` and `setsDisturbed` describe the path
+ * the generator took to build a board, not the path a player finds, so they cannot answer it --
+ * only minimising over every arrangement can.
+ */
+function roszadaCheck() {
+    const rows = []
+    let pass = true
+
+    for (const lv of LEVELS) {
+        const st = levelState(lv)
+        const tiles = allTiles(st)
+        const solvable = solveAll(tiles) !== null
+        const { partitions, capped } = allPartitions(tiles, 200000, Date.now() + 10000)
+
+        let best = null
+
+        for (const part of partitions) {
+            const plan = planFor(part, st)
+
+            if (!best || plan.cost < best.cost) best = { cost: plan.cost, anchorOf: plan.anchorOf, part }
+        }
+
+        const replay = best ? replayPlan(st, best.part, best.anchorOf) : { ok: false, why: 'no plan' }
+        const tableMoves = best ? best.cost - st.hand.length : 0
+        const row = {
+            id: lv.id,
+            tiles: tiles.length,
+            hand: st.hand.length,
+            arrangements: partitions.length + (capped ? '+ (capped)' : ''),
+            par: lv.par,
+            minimum: best ? best.cost : '—',
+            'from hand': st.hand.length,
+            'off table': tableMoves,
+            replay: replay.ok ? 'solved in ' + replay.moved : 'FAILED: ' + (replay.why ?? '?'),
+            ok: solvable && !capped && best?.cost === lv.par && tableMoves >= 1 && replay.ok && replay.moved === lv.par,
+        }
+
+        if (!row.ok) pass = false
+
+        rows.push(row)
+    }
+
+    console.table(rows)
+    console.log(pass
+        ? 'PASS — every board solvable, every par minimal, every board needs the table taken apart.'
+        : 'FAIL — see the ok column.')
+
+    return pass
 }
 
 /* ── loading ──────────────────────────────────────────────────────────────── */
