@@ -29,6 +29,10 @@
   --tile-a:#D28A2E;
   --tile-g:#3F8F66;
 
+  /* the rack: one step down from the table, still unambiguously light */
+  --rack:#E6EAF1;
+  --rack-sunk:#DCE2EC;
+
   --tile-w:40px;
   --tile-h:52px;
   --tile-f:19px;
@@ -117,7 +121,33 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .freeing{font-size:12px;color:var(--soft);margin-top:3px;max-width:150px;line-height:1.3}
 
 /* ── board ────────────────────────────────────────────────────────────────── */
-main{padding:14px 12px 0}
+/* THE PLAY SCREEN IS A FULL-HEIGHT COLUMN: bar, band, table, rack. The table is the only part
+   that scrolls, so the rack is flush with the bottom of the viewport whether the board is two
+   sets or seven. Written as :not([hidden]) so it cannot beat .screen[hidden]{display:none}. */
+#play:not([hidden]){
+  display:flex;flex-direction:column;
+  height:100vh;height:100dvh;overflow:hidden;
+}
+#play .bar,#play .band,#play .rack{flex:0 0 auto}
+.tablewrap{position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+main{
+  flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  /* the fade is the scroll affordance; a bar down the side of the table is not part of the design */
+  scrollbar-width:none;
+  padding:14px 12px 10px;
+  /* own stacking context, so nothing inside the table can paint over the rack */
+  position:relative;z-index:0;
+}
+main::-webkit-scrollbar{display:none}
+/* THE ONLY SIGN THAT THERE IS MORE BELOW: a fade, added by JS when the table actually overflows
+   and removed at the end of the scroll. No scrollbar, no arrow, no sentence. */
+#fade{
+  position:absolute;left:0;right:0;bottom:0;height:34px;pointer-events:none;
+  background:linear-gradient(to top,var(--paper) 18%,rgba(255,255,255,0));
+  opacity:0;transition:opacity .2s;
+}
+.tablewrap.more #fade{opacity:1}
 .cap{
   font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
   color:var(--soft);margin:0 2px 7px;font-weight:600;
@@ -141,13 +171,23 @@ body.holding #newset{border-color:var(--accent);color:var(--accent);background:#
 }
 
 /* THE DESTINATION BAR: always in the layout, only ever LIT. An element appearing would reflow the
-   board, and a board that shifts under a decision is its own bug. */
+   board, and a board that shifts under a decision is its own bug.
+
+   THE TOUCH AREA AND THE BAR ARE DIFFERENT SIZES, deliberately. The box is 22px so a finger can
+   hit it; the bar drawn inside it is the same 5px it always was. The negative side margins claw
+   back 6px of the box so a six-tile run still fits one line on a 375px phone -- the overlap falls
+   on the neighbouring tile's edge, which after the targetUnder fix resolves to the same insertion
+   point anyway, so the two hit areas agree where they meet. */
 .drop{
-  flex:0 0 auto;width:5px;align-self:stretch;min-height:var(--tile-h);
-  border-radius:4px;background:transparent;transition:background .14s;margin:0 1px;
+  flex:0 0 auto;width:22px;align-self:stretch;min-height:var(--tile-h);
+  margin:0 -3px;position:relative;background:transparent;
 }
-body.holding .drop{background:#CBD5E6}
-body.holding .drop:active{background:var(--accent)}
+.drop::after{
+  content:'';position:absolute;top:0;bottom:0;left:50%;width:5px;margin-left:-2.5px;
+  border-radius:4px;background:transparent;transition:background .14s;
+}
+body.holding .drop::after{background:#9FB0CE}
+body.holding .drop:active::after{background:var(--accent)}
 
 /* the insertion gap: a real element with animated width, so it pushes its neighbours */
 .gap{flex:0 0 auto;width:0;transition:width .14s}
@@ -176,7 +216,10 @@ body.holding .drop:active{background:var(--accent)}
   fill:currentColor;display:block;
 }
 .tile__num{
-  position:relative;z-index:1;
+  /* NO z-index HERE. It used to be z-index:1, which lifted every numeral into the nearest
+     stacking context above the rack -- so numbers floated over the hand while their own tiles
+     scrolled away underneath. DOM order already paints it above the face. */
+  position:relative;
   font-size:var(--tile-f);font-weight:700;color:#fff;
   font-variant-numeric:tabular-nums;letter-spacing:-.02em;
   text-shadow:0 1px 2px rgba(0,0,0,.18);
@@ -191,11 +234,6 @@ body.holding .drop:active{background:var(--accent)}
   box-shadow:0 0 0 3px rgba(43,76,155,.18);
   animation:pulse 1.3s ease-in-out infinite;
 }
-.rack .tile.hint .tile__aura,
-#ghost .tile.hint .tile__aura{
-  border-color:#FFD34E;
-  box-shadow:0 0 12px 2px rgba(255,211,78,.45);
-}
 @keyframes pulse{0%,100%{opacity:.25}50%{opacity:1}}
 
 #ghost{position:fixed;left:0;top:0;z-index:99;pointer-events:none;display:flex;gap:3px;opacity:.94}
@@ -203,32 +241,28 @@ body.holding .drop:active{background:var(--accent)}
 #ghost .tile{transform:scale(1.08) rotate(-3deg);opacity:.95}
 
 /* ── bottom ───────────────────────────────────────────────────────────────── */
+/* A LIGHT TINT, NOT A DARK PANEL. The rack used to be #1E2534, which meant every single thing
+   inside it needed a second, inverted set of colours -- buttons, dots, status text, even the
+   hint aura went gold in here. It is now one step down from the table in the same blue-grey
+   family, so all of that compensation is gone and the rack inherits the light UI unchanged. */
 .rack{
   position:sticky;bottom:0;margin-top:14px;
-  background:#1E2534;border-radius:18px 18px 0 0;
+  /* its own stacking context, above main's z-index:0 -- the rack is never painted over */
+  z-index:10;
+  background:var(--rack);border-top:1px solid var(--line);border-radius:18px 18px 0 0;
   padding:12px 12px calc(12px + env(safe-area-inset-bottom));
-  box-shadow:0 -8px 24px rgba(20,23,28,.14);
+  box-shadow:0 -6px 18px rgba(20,23,28,.06);
 }
-.rack .cap{color:#8D96A8;margin:2px 4px 8px}
-.rack #hand{background:rgba(255,255,255,.07);margin-top:0}
-.rack .btn{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.16);color:#EDF0F5}
-.rack .btn:disabled{opacity:.3}
+.rack .cap{color:var(--soft);margin:2px 4px 8px}
+.rack #hand{background:var(--rack-sunk);margin-top:0}
 .rack .acts{padding:0;margin-top:10px}
-body.holding .rack .drop{background:rgba(255,255,255,.28)}
-body.holding .rack .drop:active{background:#fff}
 
 .status{
   display:flex;align-items:center;justify-content:space-between;
   padding:11px 5px 2px;gap:10px;
 }
-.status .metrics{color:#8D96A8}
-.status .metrics b{color:#fff}
-.status .clock{color:#8D96A8}
-.scorestars{font-size:14px;letter-spacing:2px;color:#F0B429;line-height:1}
-.scorestars span{color:#414A5C}
-.heart{background:#6E7B94}
-.hearts.low .heart:not(.gone){background:#E2726A}
-.heart.gone{background:#333C4D}
+.scorestars{font-size:14px;letter-spacing:2px;color:#C08A12;line-height:1}
+.scorestars span{color:#BFC6D2}
 .hearts{display:flex;gap:4px;align-items:center}
 .heart{width:9px;height:9px;border-radius:50%;background:var(--accent);display:block}
 .heart.gone{background:#D6DAE0}
@@ -246,6 +280,16 @@ body.holding .rack .drop:active{background:#fff}
 .btn:disabled{opacity:.35}
 .btn.go{background:var(--accent);color:#fff;border-color:var(--accent)}
 
+
+/* Everything above that moves does so on a loop or on a win. Somebody who has asked their phone
+   to stop animating things gets the same game without any of it. */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms!important;animation-iteration-count:1!important;
+    transition-duration:.001ms!important;
+  }
+  .tile.hint .tile__aura{opacity:1}
+}
 
 /* ── logo ─────────────────────────────────────────────────────────────────── */
 .logo{display:block}
@@ -267,7 +311,7 @@ body.holding .rack .drop:active{background:#fff}
 .credit{margin-top:auto;padding-top:30px;font-size:11.5px;color:#9AA1AC;line-height:1.6;max-width:300px}
 
 /* ── the animated demonstration ───────────────────────────────────────────── */
-.demo{position:relative;height:152px;margin:12px auto 2px;max-width:252px}
+.demo{position:relative;height:152px;margin:6px auto 0;max-width:252px}
 .demo .tile{position:absolute;--tile-w:26px;--tile-h:34px;--tile-f:13px;margin:0;
   animation-duration:7.5s;animation-iteration-count:infinite;
   animation-timing-function:cubic-bezier(.45,0,.2,1)}
@@ -305,12 +349,16 @@ body.holding .rack .drop:active{background:#fff}
 .lvstars span{color:#D6DAE0}
 
 /* ── rules + end ──────────────────────────────────────────────────────────── */
-.sheet{padding:20px 18px 34px;max-width:520px;margin:0 auto}
-.sheet h2{font-family:'Source Serif 4',Georgia,serif;font-size:24px;font-weight:600;margin-bottom:5px}
-.sheet .lead{color:var(--soft);font-size:14.5px;line-height:1.5;margin-bottom:20px}
-.rule{margin-bottom:19px}
-.rule h3{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-bottom:7px}
-.rule p{color:var(--soft);font-size:14px;line-height:1.5;margin-top:7px}
+.sheet{padding:14px 18px 18px;max-width:520px;margin:0 auto}
+.sheet h2{font-family:'Source Serif 4',Georgia,serif;font-size:23px;font-weight:600;margin-bottom:5px}
+.sheet .lead{color:var(--soft);font-size:14.5px;line-height:1.45;margin-bottom:13px}
+.rule{margin-bottom:12px}
+/* the two one-liners at the foot of the rules: scoring, then controls */
+.fine{color:var(--soft);font-size:13px;line-height:1.45;margin-bottom:7px}
+.fine b{color:var(--ink);font-weight:600}
+.fine:last-of-type{margin-bottom:16px}
+.rule h3{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px}
+.rule p{color:var(--soft);font-size:14px;line-height:1.45;margin-top:6px}
 .mini{display:flex;gap:3px}
 .mini .tile{margin:0 1px}
 
@@ -325,6 +373,26 @@ body.holding .rack .drop:active{background:#fff}
 .endLine b{color:var(--ink);font-weight:600}
 .endNote{font-size:14px;color:var(--soft);margin-top:7px;line-height:1.45;max-width:270px}
 .end .acts{width:100%;max-width:330px;margin-top:26px;padding:0;flex-wrap:wrap}
+/* THE BEAT BEFORE THE END SCREEN. The board is solved for ~620ms before anything else happens:
+   the sets take the "correct" green they already use in the level list and settle by 1.4%, which
+   is the whole celebration. Input is closed for the duration in onDown, not here. */
+body.settling #table .set{
+  border-color:var(--ok);background:#F4FAF6;
+  animation:settle .58s cubic-bezier(.3,.9,.3,1) both;
+}
+@keyframes settle{
+  0%{transform:scale(1)}
+  38%{transform:scale(1.014)}
+  100%{transform:scale(1)}
+}
+body.losing .hearts .heart{animation:dotsOut .5s ease both}
+@keyframes dotsOut{0%{opacity:1}45%{opacity:.25}100%{opacity:1}}
+
+/* the screen arrives: 380ms, one direction, no bounce */
+#end .end{animation:endIn .38s cubic-bezier(.2,.8,.25,1) both}
+@keyframes endIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+#end .endStars{animation:endIn .44s .1s cubic-bezier(.2,.8,.25,1) both}
+
 #end[data-kind=lose] .endStars{color:#D6DAE0}
 #end[data-kind=lose] h2{color:var(--warn)}
 
@@ -413,12 +481,14 @@ body.holding .rack .drop:active{background:#fff}
     </div>
   </div>
 
-  <main>
-    <div class="cap">Stół</div>
-    <div id="table"></div>
-    <div id="newset">nowy układ</div>
-
-  </main>
+  <div class="tablewrap">
+    <main>
+      <div class="cap">Stół</div>
+      <div id="table"></div>
+      <div id="newset">nowy układ</div>
+    </main>
+    <div id="fade" aria-hidden="true"></div>
+  </div>
 
   <div class="rack">
     <div class="cap">Twoje płytki</div>
@@ -448,8 +518,7 @@ body.holding .rack .drop:active{background:#fff}
   </div>
   <div class="sheet">
     <h2 class="serif">Jak grać</h2>
-    <p class="lead">Masz kilka płytek na ręce. Zagraj wszystkie tak, żeby na koniec
-      każdy układ na stole był poprawny. Układ jest poprawny na jeden z dwóch sposobów.</p>
+    <p class="lead">Zagraj wszystkie płytki z ręki tak, żeby każdy układ na stole był poprawny.</p>
 
     <div class="rule">
       <h3>Seria</h3>
@@ -460,30 +529,18 @@ body.holding .rack .drop:active{background:#fff}
     <div class="rule">
       <h3>Grupa</h3>
       <div class="mini" id="exGroup"></div>
-      <p>Ta sama liczba w trzech lub czterech różnych kolorach. Nigdy dwa razy ten sam kolor.</p>
+      <p>Ta sama liczba w różnych kolorach.</p>
     </div>
 
     <div class="rule">
       <h3>Wolno rozłożyć wszystko</h3>
-      <p>To jest cała gra. Każdy układ na stole można rozebrać i poskładać inaczej.
-        Gdy z długiej serii wyjmiesz płytkę ze środka, seria sama rozpada się na dwie —
-        o ile obie części zostaną poprawne.</p>
+      <p>Każdy układ na stole można rozebrać i poskładać inaczej.</p>
       <div class="demo" id="demo"></div>
     </div>
 
-    <div class="rule">
-      <h3>Norma i limit ruchów</h3>
-      <p>Każda plansza ma wyliczoną <b>normę</b> — najmniejszą możliwą liczbę przełożonych płytek.
-        Ruchy ponad normę zużywają zapas, pokazany kropkami. Gdy zapas się skończy, plansza
-        jest przegrana. Koszt liczy się w płytkach: przełożenie trzech naraz kosztuje trzy.</p>
-    </div>
-
-    <div class="rule">
-      <h3>Sterowanie</h3>
-      <p>Dotknij płytkę, żeby ją podnieść — dotknij ponownie, żeby odłożyć. Możesz podnieść
-        kilka naraz, z różnych układów. Potem dotknij miejsca docelowego: paska przy układzie,
-        ręki albo pola „nowy układ”. Można też po prostu przeciągać.</p>
-    </div>
+    <p class="fine"><b>Norma</b> to najmniejsza możliwa liczba ruchów; ruchy ponad normę zabierają
+      gwiazdki i zużywają zapas z kropek, a podpowiedź kosztuje gwiazdkę.</p>
+    <p class="fine">Dotknij płytkę, potem miejsca docelowego — albo po prostu przeciągnij.</p>
 
     <button class="btn go" id="rulesOk" style="width:100%">Rozumiem</button>
   </div>
@@ -1217,6 +1274,7 @@ function render() {
     state.hand.forEach((id) => hand.appendChild(tileEl(id)))
 
     paintStatus()
+    requestAnimationFrame(paintFade)
     check()
 }
 
@@ -1342,7 +1400,9 @@ let press = null
  * So a tap on a tile can never place, and a tap on a target can never select.
  */
 function onDown(e) {
-    if (solved) return
+    /* `ended` as well as `solved`: a loss leaves the position unsolved, and during the beat
+       before the end screen the board must already be untouchable. */
+    if (solved || ended) return
 
     const tile = e.target.closest('[data-tile]')
     const drop = e.target.closest('[data-drop]')
@@ -1447,19 +1507,74 @@ function targetUnder(x, y) {
         if (tile && !held.includes(tile.dataset.tile)) {
             const set = tile.closest('[data-set]')
 
-            if (!set) return { where: 'hand' }
+            /*
+             * A TILE INSIDE A SET IS AN INSERTION POINT, not a miss. Most of a set's surface is
+             * tiles, not bars, so this is the common case and it used to be the broken one: with
+             * no `.drop` under the finger the loop fell all the way through to the hand and the
+             * tile flew home. Left half of the tile is the gap before it, right half the gap
+             * after -- the same geometry the two end bars express, continued across the middle.
+             */
+            if (set) {
+                const si = Number(set.dataset.set)
+                const box = tile.getBoundingClientRect()
+                const after = x > box.left + box.width / 2
+                const at = state.sets[si].indexOf(tile.dataset.tile)
 
-            const si = Number(set.dataset.set)
-            const idx = state.sets[si].indexOf(tile.dataset.tile)
-            const box = tile.getBoundingClientRect()
+                /* the tile is mid-render or gone from this set: fall back to its row geometry */
+                const idx = at < 0
+                    ? insertIndexAt(set, x, y)
+                    : Math.min(at + (after ? 1 : 0), state.sets[si].length)
 
-            return { where: 'set', si, idx: x > box.left + box.width / 2 ? idx + 1 : idx }
+                return { where: 'set', si, idx }
+            }
+
+            /* a tile in the hand means the hand; a tile anywhere else (a demo, a solution row)
+               is not a target at all, so keep looking rather than guessing */
+            if (tile.closest('#hand')) return { where: 'hand' }
+        }
+
+        /* the padding, the border, the gap elements: still that set, at the nearest seam */
+        const setEl = el.closest?.('[data-set]')
+
+        if (setEl) {
+            return { where: 'set', si: Number(setEl.dataset.set), idx: insertIndexAt(setEl, x, y) }
         }
 
         if (el.id === 'hand' || el.closest?.('#hand')) return { where: 'hand' }
     }
 
+    /*
+     * NOTHING UNDER THE POINTER IS NOT THE HAND. Returning null leaves the selection picked up
+     * exactly as it was, and a second tap finishes the move -- the same degradation onCancel
+     * chose, for the same reason.
+     */
     return null
+}
+
+/**
+ * WHERE IN THIS SET WOULD A TILE LAND, given only a point?
+ *
+ * Counts the tiles whose centre the pointer is past. A set wraps onto more than one line when it
+ * is long, so tiles are only counted on the row the pointer is actually on; without that, a drop
+ * on the second line of a wrapped run resolves into the middle of the first.
+ */
+function insertIndexAt(setEl, x, y) {
+    const si = Number(setEl.dataset.set)
+    const tiles = [...setEl.querySelectorAll('[data-tile]')]
+    const rows = tiles.map((t) => t.getBoundingClientRect())
+
+    if (!rows.length) return 0
+
+    const onRow = rows.filter((b) => y >= b.top - 4 && y <= b.bottom + 4)
+    const line = onRow.length ? onRow : rows
+    let idx = 0
+
+    for (const b of rows) {
+        if (b.bottom < line[0].top) idx++                      // whole rows above the pointer
+        else if (line.includes(b) && x > b.left + b.width / 2) idx++
+    }
+
+    return Math.min(idx, state.sets[si].length)
 }
 
 function drawGhost() {
@@ -1584,6 +1699,20 @@ function paintStatus() {
     hearts.classList.toggle('low', left <= 1)
 }
 
+/**
+ * THE SCROLL AFFORDANCE. On when the table has more below the fold, off at the end of the scroll
+ * and off when everything fits. Called after every render, on scroll, and on resize -- a phone
+ * rotating or a keyboard appearing changes the answer without anything being scrolled.
+ */
+function paintFade() {
+    const box = $('table')?.closest('main')
+    const wrap = box?.closest('.tablewrap')
+
+    if (!box || !wrap) return
+
+    wrap.classList.toggle('more', box.scrollHeight - box.scrollTop - box.clientHeight > 4)
+}
+
 function tick() { $('clock').textContent = clock() }
 
 function startClock() {
@@ -1626,11 +1755,37 @@ function deductions() {
     return out
 }
 
+/**
+ * THE END SCREEN IS DELAYED, THE RESULT IS NOT.
+ *
+ * `ended` and the clock stop on the instant the board is decided, and the whole screen is built
+ * from that instant's numbers -- so the time on it is the time of the win, not the time the
+ * player finished looking at the board. Only `show('end')` waits.
+ *
+ * The token guards the wait: reset, undo, back, the wordmark, anything that moves on invalidates
+ * the pending screen instead of letting it arrive over the top of a fresh board.
+ */
+let endToken = 0
+
+function revealEnd(ms) {
+    const mine = ++endToken
+
+    setTimeout(() => {
+        if (mine !== endToken || !ended) return
+        if (document.body.dataset.screen !== 'play') return
+
+        document.body.classList.remove('settling', 'losing')
+        show('end')
+    }, ms)
+}
+
 function onWin() {
     if (ended) return
 
     ended = true
     stopClock()
+    $('clock').textContent = clock()
+    document.body.classList.add('settling')
 
     const got = starsEarned()
     const prev = best[level.id]
@@ -1651,7 +1806,7 @@ function onWin() {
     $('endAgain').textContent = 'Jeszcze raz'
     $('endNext').hidden = idx >= LEVELS.length - 1
     $('endSolution').hidden = true
-    show('end')
+    revealEnd(620)
 }
 
 function onLose() {
@@ -1659,6 +1814,8 @@ function onLose() {
 
     ended = true
     stopClock()
+    $('clock').textContent = clock()
+    document.body.classList.add('losing')
 
     $('end').dataset.kind = 'lose'
     $('endTitle').textContent = 'Koniec ruchów'
@@ -1668,7 +1825,7 @@ function onLose() {
     $('endAgain').textContent = 'Spróbuj jeszcze raz'
     $('endNext').hidden = true
     $('endSolution').hidden = false
-    show('end')
+    revealEnd(560)
 }
 
 /** Kept, and permanently false today — see the note in check(). */
@@ -1725,6 +1882,8 @@ const saveBest = () => { try { localStorage.setItem('roszada:best', JSON.stringi
 
 function onLevelLoaded(i) {
     idx = i
+    endToken++
+    document.body.classList.remove('settling', 'losing')
     ended = false
     usedHint = false
     started = 0
@@ -1788,7 +1947,7 @@ $('undo').addEventListener('click', () => {
 })
 $('reset').addEventListener('click', () => load(idx))
 $('back').addEventListener('click', () => { stopClock(); renderList(); show('list') })
-$('help').addEventListener('click', () => show('rules'))
+$('help').addEventListener('click', () => { document.body.dataset.came = 'play'; show('rules') })
 $('rulesOk').addEventListener('click', () => show(document.body.dataset.came || 'home'))
 $('listGrid').addEventListener('click', (e) => {
     const b = e.target.closest('[data-go]')
@@ -1814,9 +1973,18 @@ $('homeLevels').addEventListener('click', () => { renderList(); show('list') })
 $('homeRules').addEventListener('click', () => { document.body.dataset.came = 'home'; show('rules') })
 $('listBack').addEventListener('click', () => show('home'))
 
+$('table').closest('main').addEventListener('scroll', paintFade, { passive: true })
+window.addEventListener('resize', paintFade)
+window.addEventListener('orientationchange', () => setTimeout(paintFade, 250))
+
 /* every wordmark, on every screen, goes home */
 document.querySelectorAll('[data-home]').forEach((el) => {
-    el.addEventListener('click', () => { stopClock(); show('home') })
+    el.addEventListener('click', () => {
+        endToken++
+        document.body.classList.remove('settling', 'losing')
+        stopClock()
+        show('home')
+    })
 })
 
 load(0)
