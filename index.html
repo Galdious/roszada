@@ -1780,6 +1780,203 @@ function solvableMovingOnly(st0, movers, depth, deadline, onceEach = false) {
     return { found, timedOut }
 }
 
+/* ── the shape of the solution path ───────────────────────────────────────── */
+
+/** Where a tile sits: 'hand', or the index of its set. */
+const tileHome = (st, id) => (st.hand.includes(id) ? 'hand' : st.sets.findIndex((x) => x.includes(id)))
+
+/** A set as a player reads it: faces in order. */
+const faces = (ids) => [...ids].sort((a, b) => (ord(a) < ord(b) ? -1 : 1)).map(value).join(',')
+
+/**
+ * ONE MOVE, ALLOWED ONLY IF IT BREAKS NOTHING THAT WAS WHOLE.
+ *
+ * A set that was valid may not be left invalid -- not the set a tile leaves, not the set it joins.
+ * Starting a new set, or adding to one that is already under construction, is fine. This is what
+ * "impossible or pointless until the previous move has happened" means in practice: R3 cannot leave
+ * A3,B3,G3 until something else holds that group together.
+ */
+function cleanStep(st, id, target) {
+    const from = tileHome(st, id)
+    const srcWasValid = from !== 'hand' && validSet(st.sets[from])
+    const rest = from === 'hand' ? [] : st.sets[from].filter((x) => x !== id)
+    const dstWasValid = target.where === 'set' && validSet(st.sets[target.si])
+    const next = place(st, [id], target)
+
+    if (!next) return null
+
+    if (srcWasValid) {
+        for (const x of rest) {
+            const h = next.sets.findIndex((y) => y.includes(x))
+
+            if (h < 0 || !validSet(next.sets[h])) return null
+        }
+    }
+
+    if (dstWasValid && !validSet(next.sets[next.sets.findIndex((y) => y.includes(id))])) return null
+
+    return next
+}
+
+/** Every clean order of a plan's moves that ends solved. Depth-first; a bad prefix is never extended. */
+function cleanOrders(st0, part, anchorOf, cap = 20000) {
+    const plan = movePlan(part, anchorOf, st0)
+
+    if (!plan) return { moves: [], orders: [] }
+
+    const container = new Map()
+
+    part.forEach((_, j) => {
+        const si = anchorOf[j]
+
+        if (si >= 0 && plan.kept[si].length) container.set(j, plan.kept[si][0])
+    })
+
+    const orders = []
+
+    ;(function go(st, left, order, made) {
+        if (orders.length >= cap) return
+
+        if (!left.length) {
+            if (isSolved(st)) orders.push(order)
+
+            return
+        }
+
+        for (const k of left) {
+            const mv = plan.moves[k]
+            const anchor = container.get(mv.target) ?? made.get(mv.target)
+            let target = { where: 'new' }
+
+            if (anchor) {
+                const si = st.sets.findIndex((x) => x.includes(anchor))
+
+                if (si < 0) continue
+
+                target = { where: 'set', si, idx: st.sets[si].length }
+            }
+
+            const next = cleanStep(st, mv.id, target)
+
+            if (!next) continue
+
+            go(next, left.filter((x) => x !== k), [...order, k], anchor ? made : new Map(made).set(mv.target, mv.id))
+        }
+    })(st0, plan.moves.map((_, i) => i), [], new Map())
+
+    return { moves: plan.moves, orders }
+}
+
+/**
+ * FORCED ORDER: the longest chain of moves where each must come after the one before it.
+ *
+ * Move A must precede move B when A comes first in EVERY clean ordering of an optimal solution.
+ * Independent moves are easy at any par; a chain of three is hard at par 4. Taken as the SHORTEST
+ * such chain over all cheapest solutions, because a chain one optimal line avoids is not forced.
+ */
+function forcedChain(st, cheapest) {
+    let best = null
+
+    for (const { part, anchorOf } of cheapest) {
+        const { moves, orders } = cleanOrders(st, part, anchorOf)
+
+        if (!orders.length) continue
+
+        const pos = orders.map((o) => {
+            const at = []
+
+            o.forEach((k, i) => (at[k] = i))
+
+            return at
+        })
+        const before = (i, j) => pos.every((at) => at[i] < at[j])
+        const seq = moves.map((_, i) => i).sort((i, j) => pos[0][i] - pos[0][j])
+        const len = moves.map(() => 1)
+        const prev = moves.map(() => -1)
+
+        for (const j of seq) {
+            for (const i of seq) {
+                if (i !== j && before(i, j) && len[i] + 1 > len[j]) {
+                    len[j] = len[i] + 1
+                    prev[j] = i
+                }
+            }
+        }
+
+        let end = 0
+
+        for (let k = 1; k < len.length; k++) if (len[k] > len[end]) end = k
+
+        const chain = []
+
+        for (let k = end; k >= 0; k = prev[k]) chain.unshift(value(moves[k].id))
+
+        if (!best || len[end] < best.length) best = { length: len[end], chain: chain.join(' → ') }
+    }
+
+    return best ?? { length: null, chain: 'no clean ordering' }
+}
+
+/**
+ * TRAP MOVES: single moves from the start that LOOK productive and belong to no optimal solution.
+ *
+ * Looks productive means the set the tile lands in is valid afterwards -- a run extended, a group
+ * completed, a hand tile placed somewhere legal -- and, for a tile taken off the table, the set it
+ * left is still valid too, because a move that visibly breaks something does not look productive.
+ * Distinct by face, source and destination, so the two copies of one tile are one move.
+ */
+function trapMoves(st, cheapest) {
+    const optimal = new Set()
+
+    for (const { part, anchorOf } of cheapest) {
+        const plan = movePlan(part, anchorOf, st)
+
+        if (!plan) continue
+
+        for (const mv of plan.moves) {
+            const to = anchorOf[mv.target]
+
+            optimal.add(`${value(mv.id)}|${tileHome(st, mv.id)}|${to < 0 ? 'new' : to}`)
+        }
+    }
+
+    const out = []
+    const tried = new Set()
+
+    for (const id of [...st.hand, ...st.sets.flat()]) {
+        const from = tileHome(st, id)
+
+        for (let si = 0; si < st.sets.length; si++) {
+            const key = `${value(id)}|${from}|${si}`
+
+            if (si === from || tried.has(key)) continue
+
+            tried.add(key)
+
+            const next = place(st, [id], { where: 'set', si, idx: st.sets[si].length })
+
+            if (!next || !validSet(next.sets[next.sets.findIndex((x) => x.includes(id))])) continue
+
+            if (from !== 'hand') {
+                const rest = st.sets[from].filter((x) => x !== id)
+
+                if (rest.some((x) => {
+                    const h = next.sets.findIndex((y) => y.includes(x))
+
+                    return h < 0 || !validSet(next.sets[h])
+                })) continue
+            }
+
+            if (optimal.has(key)) continue
+
+            out.push(`${value(id)} ${from === 'hand' ? 'z ręki' : 'z ' + faces(st.sets[from])} → ${faces(st.sets[si])}`)
+        }
+    }
+
+    /* hand tiles first: that is where a player looks */
+    return out.sort((a, b) => (b.includes('z ręki') ? 1 : 0) - (a.includes('z ręki') ? 1 : 0))
+}
+
 /**
  * THE SELF-CHECK. For every level: it can be solved; the stated par is reachable AND nothing
  * cheaper exists; and the cheapest solution takes at least one tile OFF THE TABLE rather than
@@ -1800,6 +1997,7 @@ function solvableMovingOnly(st0, movers, depth, deadline, onceEach = false) {
  */
 function roszadaCheck() {
     const rows = []
+    const details = []
     let pass = true
 
     for (const lv of LEVELS) {
@@ -1831,6 +2029,16 @@ function roszadaCheck() {
          * which one you take.
          */
         const faceKey = (x) => x.map(value).sort().join(',')
+
+        /* the shape of the path, measured on the arrangements that cost exactly the replayed par */
+        const cheapest = reached === null ? [] : costs
+            .filter((c) => c.cost === reached)
+            .map((c) => ({ part: c.part, anchorOf: planFor(c.part, st).anchorOf }))
+        const chain = forcedChain(st, cheapest)
+        const traps = trapMoves(st, cheapest)
+
+        details.push({ id: lv.id, chain: chain.chain, traps })
+
         const untouched = best
             ? costs.filter((c) => c.cost === best.cost).map((c) => {
                 const keys = c.part.map(faceKey)
@@ -1890,6 +2098,8 @@ function roszadaCheck() {
             'from hand': st.hand.length,
             'off table': tableMoves ?? '—',
             bystanders: bLo === null ? '—' : `${bLo === bHi ? bLo : bLo + '–' + bHi}/${st.sets.length}`,
+            'forced chain': chain.length ?? '—',
+            traps: traps.length,
             ms: Date.now() - t0,
             ok,
         })
@@ -1898,6 +2108,11 @@ function roszadaCheck() {
     }
 
     console.table(rows)
+
+    for (const d of details) {
+        console.log(`${d.id}: chain ${d.chain}; traps: ${d.traps.slice(0, 2).join('; ') || 'none'}`)
+    }
+
     console.log(pass
         ? 'PASS — every board solvable, every par reached AND proven minimal, every board needs the table taken apart.'
         : 'FAIL — see the ok column.')
@@ -2042,6 +2257,36 @@ function onCancel(e) {
     render()
 }
 
+/**
+ * A LOST CAPTURE MUST NOT STRAND THE PRESS.
+ *
+ * A press is released only by its own pointer's up or cancel. If the capture is dropped and that up
+ * never arrives, every later touch is ignored until the page reloads -- so this is the safety net.
+ *
+ * IT CANNOT SIMPLY CANCEL, because the commonest lost capture is our own: onMove calls render() as a
+ * drag starts, render() replaces the tile that held the capture, and the browser reports the capture
+ * lost while the finger is still down. Cancelling there would end every drag the moment it began.
+ *
+ * So it re-takes the capture on <html>, which render() never replaces, and the pointer's up still
+ * arrives. It releases the press only when the pointer is genuinely gone: setPointerCapture throws
+ * for a pointer that is no longer active (a lifted finger), and a mouse reports no buttons held.
+ */
+function onLostCapture(e) {
+    if (!press || e.pointerId !== press.pointerId) return
+
+    if (e.pointerType === 'mouse' && e.buttons === 0) {
+        onCancel(e)
+
+        return
+    }
+
+    try {
+        document.documentElement.setPointerCapture(e.pointerId)
+    } catch (err) {
+        onCancel(e)
+    }
+}
+
 /* ── drag: geometry, not logic ────────────────────────────────────────────── */
 
 /*
@@ -2174,6 +2419,7 @@ document.addEventListener('pointerdown', onDown, { passive: false })
 document.addEventListener('pointermove', onMove)
 document.addEventListener('pointerup', onUp)
 document.addEventListener('pointercancel', onCancel)
+document.addEventListener('lostpointercapture', onLostCapture)
 
 /*
  * NO BROWSER ZOOM DURING PLAY. The gesture* events are iOS Safari's pinch; the two-finger
