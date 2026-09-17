@@ -1978,6 +1978,69 @@ function trapMoves(st, cheapest) {
 }
 
 /**
+ * NEAR MISSES: where a hand tile almost goes and cannot.
+ *
+ * The temptation in this game is rarely a legal move that turns out wrong -- on the six shipped boards
+ * no hand tile has a single valid placement that is not part of an optimal line. It is the move a
+ * player WANTS to make and finds they cannot: the red 4 next to a group of fours that already holds a
+ * red. For each distinct hand tile, every table set it cannot legally join is checked against three
+ * kinds, and counted once under the first that matches:
+ *
+ *   colour-blocked     a group of its number that already has its colour
+ *   one step from run  a run in its colour, one number missing between the tile and the run's end
+ *   one move away      it would fit if one other tile left the set first, or one other tile joined
+ *
+ * `onPath` marks a near miss some optimal line resolves -- board 2's A2 beside A4..A7 is the lesson
+ * itself, not a dead end -- so the two can be told apart when reading the list.
+ */
+function nearMisses(st, cheapest) {
+    const fits = (set, ...add) => validSet(tidy([...set, ...add]))
+    const used = new Set()
+
+    for (const { part, anchorOf } of cheapest) {
+        const plan = movePlan(part, anchorOf, st)
+
+        if (!plan) continue
+
+        for (const mv of plan.moves) {
+            if (st.hand.includes(mv.id) && anchorOf[mv.target] >= 0) used.add(`${value(mv.id)}|${anchorOf[mv.target]}`)
+        }
+    }
+
+    const everyTile = allTiles(st)
+    const out = []
+    const seen = new Set()
+
+    for (const h of st.hand) {
+        if (seen.has(value(h))) continue
+
+        seen.add(value(h))
+
+        st.sets.forEach((set, si) => {
+            if (fits(set, h)) return
+
+            const isGroup = new Set(set.map(col)).size > 1
+            let kind = null
+
+            if (isGroup && num(set[0]) === num(h) && set.some((x) => col(x) === col(h))) {
+                kind = 'colour-blocked'
+            } else if (!isGroup && col(set[0]) === col(h)) {
+                const nums = set.map(num).sort((a, b) => a - b)
+
+                if (num(h) === nums[0] - 2 || num(h) === nums[nums.length - 1] + 2) kind = 'one step from run'
+            }
+
+            if (!kind && set.some((x) => fits(set.filter((y) => y !== x), h))) kind = 'one move away'
+            if (!kind && everyTile.some((y) => y !== h && !set.includes(y) && fits(set, h, y))) kind = 'one move away'
+
+            if (kind) out.push({ text: `${value(h)} → ${faces(set)} (${kind})`, onPath: used.has(`${value(h)}|${si}`) })
+        })
+    }
+
+    return out
+}
+
+/**
  * THE SELF-CHECK. For every level: it can be solved; the stated par is reachable AND nothing
  * cheaper exists; and the cheapest solution takes at least one tile OFF THE TABLE rather than
  * only dealing out the hand.
@@ -2036,8 +2099,9 @@ function roszadaCheck() {
             .map((c) => ({ part: c.part, anchorOf: planFor(c.part, st).anchorOf }))
         const chain = forcedChain(st, cheapest)
         const traps = trapMoves(st, cheapest)
+        const misses = nearMisses(st, cheapest)
 
-        details.push({ id: lv.id, chain: chain.chain, traps })
+        details.push({ id: lv.id, chain: chain.chain, traps, misses })
 
         const untouched = best
             ? costs.filter((c) => c.cost === best.cost).map((c) => {
@@ -2098,8 +2162,14 @@ function roszadaCheck() {
             'from hand': st.hand.length,
             'off table': tableMoves ?? '—',
             bystanders: bLo === null ? '—' : `${bLo === bHi ? bLo : bLo + '–' + bHi}/${st.sets.length}`,
-            'forced chain': chain.length ?? '—',
+            /*
+             * LESSON LENGTH, not difficulty. The forced chain counts how many insights must come in a
+             * fixed order, which is what a teaching board is built around -- board 2's three-step
+             * R3 → A3 → A2 scores highest of the six and is the second-easiest to play.
+             */
+            'lesson length': chain.length ?? '—',
             traps: traps.length,
+            'near misses': misses.length,
             ms: Date.now() - t0,
             ok,
         })
@@ -2110,7 +2180,8 @@ function roszadaCheck() {
     console.table(rows)
 
     for (const d of details) {
-        console.log(`${d.id}: chain ${d.chain}; traps: ${d.traps.slice(0, 2).join('; ') || 'none'}`)
+        console.log(`${d.id}: lesson ${d.chain}; traps: ${d.traps.slice(0, 2).join('; ') || 'none'}; `
+            + `near misses: ${d.misses.map((m) => m.text + (m.onPath ? ' [used by an optimal line]' : '')).join('; ') || 'none'}`)
     }
 
     console.log(pass
